@@ -1,0 +1,25 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.1.0
+  hooks:
+  - id: check-merge-conflict
+  - id: check-symlinks
+  - id: check-vcs-permalinks
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+- repo: https://github.com/golangci/golangci-lint
+  rev: v1.43.0
+  hooks:
+  - id: golangci-lint
+- repo: https://github.com/dnephin/pre-commit-golang
+  rev: v0.4.0
+  hooks:
+  - id: go-build
+  - id: go-fmt
+  - id: go-imports
+  - id: go-lint
+  # TODO(johntobin): this restricts the tests run, do I need to override args?
+  - id: go-unit-tests
+  - id: go-vet
