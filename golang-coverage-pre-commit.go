@@ -4,8 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Rule represents a single function or filename rule.
@@ -13,13 +14,18 @@ type Rule struct {
 	// Comment is not interpreted or used; it is provided as a structured way of
 	// adding comments to an entry, so that automated editing is easier.
 	Comment string
-	// The regex used when matching against a function or filename.
+	// Regex used when matching against a function or filename.
 	Regex string
-	// The required coverage level; this is a floating point percentage, so it
-	// should be >= 0 and <= 100.
+	// Coverage level required for this function or filename; this is a floating
+	// point percentage, so it should be >= 0 and <= 100.
 	Coverage float64
-	// TODO: figure out the right type.
-	// compiledRegex string
+	// compiledRegex is the result of regexp.MustCompile(Regex).
+	compiledRegex *regexp.Regexp
+}
+
+func (rule Rule) String() string {
+	bytes, _ := yaml.Marshal(&rule)
+	return string(bytes)
 }
 
 // Config represents an entire user config.
@@ -37,6 +43,11 @@ type Config struct {
 	// Functions is a list of rules matching against *filenames*; they will be
 	// checked in-order, and the first match wins.
 	Filenames []Rule
+}
+
+func (config Config) String() string {
+	bytes, _ := yaml.Marshal(&config)
+	return string(bytes)
 }
 
 func makeExampleConfig() string {
@@ -79,24 +90,61 @@ const configFile = "golang-coverage-pre-commit.yaml"
 
 var exampleConfig = flag.Bool("example_config", false, "output an example config and exit")
 
-func realMain(args []string) ([]string, error) {
+// parseYAMLConfig parses raw YAML into a Config, checks it for correctness, and
+// compiles every regex for speed.
+func parseYAMLConfig(yamlConf []byte) (Config, error) {
+	var config Config
+	if err := yaml.Unmarshal(yamlConf, &config); err != nil {
+		return config, fmt.Errorf("failed parsing YAML: %w", err)
+	}
+	if config.Default < 0 || config.Default > 100 {
+		return config, fmt.Errorf("default coverage is outside the range 0-100")
+	}
+	for i := range config.Functions {
+		config.Functions[i].compiledRegex = regexp.MustCompile(config.Functions[i].Regex)
+		if config.Functions[i].Coverage < 0 || config.Functions[i].Coverage > 100 {
+			return config, fmt.Errorf("coverage is outside the range 0-100 in %v", config.Functions[i])
+		}
+	}
+	for i := range config.Filenames {
+		config.Filenames[i].compiledRegex = regexp.MustCompile(config.Filenames[i].Regex)
+		if config.Filenames[i].Coverage < 0 || config.Filenames[i].Coverage > 100 {
+			return config, fmt.Errorf("coverage is outside the range 0-100 in %v", config.Filenames[i])
+		}
+	}
+	return config, nil
+}
+
+func realMain(args []string) (string, error) {
 	if len(args) > 0 {
-		return nil, fmt.Errorf("unexpected arguments: %v", args)
+		return "", fmt.Errorf("unexpected arguments: %v", args)
 	}
 	if *exampleConfig {
-		return []string{makeExampleConfig()}, nil
+		return makeExampleConfig(), nil
 	}
 	if _, err := os.Stat(configFile); err != nil {
-		return nil, fmt.Errorf("missing config: %v\n\n%v", configFile, makeExampleConfig())
+		return "", fmt.Errorf("missing config: %v\n\n%v", configFile, makeExampleConfig())
 	}
-	return nil, nil
+	bytes, err := os.ReadFile(configFile)
+	if err != nil {
+		return "", fmt.Errorf("failed reading config %v: %w", configFile, err)
+	}
+	config, err := parseYAMLConfig(bytes)
+	if err != nil {
+		return "", fmt.Errorf("failed parsing config %v: %w", configFile, err)
+	}
+	fmt.Printf("%v", config)
+	return "", nil
 }
 
 func main() {
 	flag.Parse()
-	_, err := realMain(flag.Args())
+	output, err := realMain(flag.Args())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v: %v\n", os.Args[0], err)
 		os.Exit(1)
+	}
+	if output != "" {
+		fmt.Print(output)
 	}
 }

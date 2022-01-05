@@ -18,7 +18,8 @@ A YAML config file named `golang-coverage-pre-commit.yaml` is _required_; if
 this file doesn't exist an example config (see below) will be printed for you to
 save and modify.
 
-The config has one required field: `default`.
+None of the fields are required; an empty config is equivalent to a config
+containing only `default: 0`.
 
 ### Example config
 
