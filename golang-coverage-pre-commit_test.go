@@ -83,10 +83,10 @@ filenames:
 func TestParseCoverageOutputSuccess(t *testing.T) {
 	input := strings.Trim(`
 github.com/.../golang-coverage-pre-commit.go:26:		String			100.0%
-github.com/.../golang-coverage-pre-commit.go:48:		String			0.0%
-github.com/.../golang-coverage-pre-commit.go:53:		makeExampleConfig	0.0%
+github.com/.../golang-coverage-pre-commit.go:48:		String			31.0%
+github.com/.../golang-coverage-pre-commit.go:53:		makeExampleConfig	50.0%
 github.com/.../golang-coverage-pre-commit.go:95:		parseYAMLConfig		100.0%
-github.com/.../golang-coverage-pre-commit.go:118:	realMain		0.0%
+github.com/.../golang-coverage-pre-commit.go:118:	realMain		17.3%
 github.com/.../golang-coverage-pre-commit.go:140:	main			0.0%
 total:											(statements)		38.1%
 `, "\n")
@@ -94,7 +94,39 @@ total:											(statements)		38.1%
 	assert.Nil(t, err)
 	assert.Equal(t, 6, len(results))
 
-	// TODO: Add validation of results.
+	expected := []CoverageLine{
+		{
+			Filename: "github.com/.../golang-coverage-pre-commit.go",
+			Function: "String",
+			Coverage: 100.0,
+		},
+		{
+			Filename: "github.com/.../golang-coverage-pre-commit.go",
+			Function: "String",
+			Coverage: 31.0,
+		},
+		{
+			Filename: "github.com/.../golang-coverage-pre-commit.go",
+			Function: "makeExampleConfig",
+			Coverage: 50.0,
+		},
+		{
+			Filename: "github.com/.../golang-coverage-pre-commit.go",
+			Function: "parseYAMLConfig",
+			Coverage: 100.0,
+		},
+		{
+			Filename: "github.com/.../golang-coverage-pre-commit.go",
+			Function: "realMain",
+			Coverage: 17.3,
+		},
+		{
+			Filename: "github.com/.../golang-coverage-pre-commit.go",
+			Function: "main",
+			Coverage: 0.0,
+		},
+	}
+	assert.Equal(t, expected, results)
 }
 
 func TestParseCoverageOutputFailure(t *testing.T) {
