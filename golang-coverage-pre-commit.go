@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -82,13 +83,8 @@ func makeExampleConfig() string {
 			},
 		},
 	}
-	bytes, _ := yaml.Marshal(&config)
-	return string(bytes)
+	return config.String()
 }
-
-const configFile = "golang-coverage-pre-commit.yaml"
-
-var exampleConfig = flag.Bool("example_config", false, "output an example config and exit")
 
 // parseYAMLConfig parses raw YAML into a Config, checks it for correctness, and
 // compiles every regex for speed.
@@ -114,6 +110,61 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 	}
 	return config, nil
 }
+
+// CoverageLine represents a single line of coverage output.
+type CoverageLine struct {
+	// Filename is the name of the source file, with the directory portion
+	// and the .go extension removed.
+	Filename string
+	// Function is the name of the function.
+	Function string
+	// Coverage is the coverage percentage.
+	Coverage float64
+}
+
+// parseCoverageOutput parses all the coverage lines and turns each into a
+// CoverageLine.
+func parseCoverageOutput(output []string) ([]CoverageLine, error) {
+	results := []CoverageLine{}
+	lineSplitter := regexp.MustCompile(`\t+`)
+	lineNumberRemover := regexp.MustCompile(`:\d+:$`)
+	percentageExtractor := regexp.MustCompile(`^(.*)%$`)
+
+	for i := range output {
+		parts := lineSplitter.Split(output[i], -1)
+		if len(parts) != 3 {
+			return results, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
+		}
+		if parts[0] == "total:" {
+			continue
+		}
+		matches := percentageExtractor.FindStringSubmatch(parts[2])
+		if len(matches) == 0 {
+			return results, fmt.Errorf("could not extract percentage from \"%v\"", parts[2])
+		}
+		percentage, err := strconv.ParseFloat(matches[1], 64)
+		if err != nil {
+			return results, fmt.Errorf("failed parsing \"%v\": %w", parts[2], err)
+		}
+		if percentage > 100 {
+			return results, fmt.Errorf("percentage > 100 in \"%v\"", parts[2])
+		}
+		if percentage < 0 {
+			return results, fmt.Errorf("percentage < 0 in \"%v\"", parts[2])
+		}
+
+		results = append(results, CoverageLine{
+			Filename: lineNumberRemover.ReplaceAllLiteralString(parts[0], ""),
+			Function: parts[1],
+			Coverage: percentage,
+		})
+	}
+	return results, nil
+}
+
+const configFile = "golang-coverage-pre-commit.yaml"
+
+var exampleConfig = flag.Bool("example_config", false, "output an example config and exit")
 
 func realMain(args []string) (string, error) {
 	if len(args) > 0 {
