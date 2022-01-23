@@ -66,8 +66,8 @@ func makeExampleConfig() string {
 			{
 				Comment: "All the fooOrDie() functions should be fully tested because" +
 					" they panic() on failure",
-				Regex:    "^.*OrDie$",
-				Coverage: 50,
+				Regex:    "OrDie$",
+				Coverage: 100,
 			},
 		},
 		Filenames: []Rule{
@@ -122,6 +122,10 @@ type CoverageLine struct {
 	Coverage float64
 }
 
+func (coverage CoverageLine) String() string {
+	return fmt.Sprintf("%s:\t%s\t%.1f%%", coverage.Filename, coverage.Function, coverage.Coverage)
+}
+
 // parseCoverageOutput parses all the coverage lines and turns each into a
 // CoverageLine.
 func parseCoverageOutput(output []string) ([]CoverageLine, error) {
@@ -131,6 +135,10 @@ func parseCoverageOutput(output []string) ([]CoverageLine, error) {
 	percentageExtractor := regexp.MustCompile(`^(.*)%$`)
 
 	for i := range output {
+		if len(output[i]) == 0 {
+			// Skip blank lines.
+			continue
+		}
 		parts := lineSplitter.Split(output[i], -1)
 		if len(parts) != 3 {
 			return results, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
@@ -160,6 +168,50 @@ func parseCoverageOutput(output []string) ([]CoverageLine, error) {
 		})
 	}
 	return results, nil
+}
+
+// checkCoverage checks that each function meets the required level of coverage,
+// returning a slice of errors.
+func checkCoverage(config Config, coverage []CoverageLine) ([]error, []string) {
+	errors := []error{}
+	debugInfo := []string{"Debug info for coverage matching"}
+
+Coverage:
+	for _, cov := range coverage {
+		debugInfo = append(debugInfo, fmt.Sprintf("- Line %v", cov))
+		for _, function := range config.Functions {
+			if function.compiledRegex.MatchString(cov.Function) {
+				debugInfo = append(debugInfo, fmt.Sprintf("  - Function match: %v", function))
+				if cov.Coverage < function.Coverage {
+					errors = append(errors, fmt.Errorf("coverage is too low: %.1f < %.1f: line \"%v\" function rule %v", cov.Coverage, function.Coverage, cov, function))
+				}
+				continue Coverage
+			} else {
+				debugInfo = append(debugInfo, fmt.Sprintf("  - Function non-match: %v", function))
+			}
+		}
+
+		for _, filename := range config.Filenames {
+			if filename.compiledRegex.MatchString(cov.Filename) {
+				debugInfo = append(debugInfo, fmt.Sprintf("  - Filename match: %v", filename))
+				if cov.Coverage < filename.Coverage {
+					errors = append(errors, fmt.Errorf("coverage is too low: %.1f < %.1f: line \"%v\" filename rule %v", cov.Coverage, filename.Coverage, cov, filename))
+				}
+				continue Coverage
+			} else {
+				debugInfo = append(debugInfo, fmt.Sprintf("  - Filename non-match: %v", filename))
+			}
+		}
+
+		if cov.Coverage < config.Default {
+			errors = append(errors, fmt.Errorf("line %v did not meet default coverage requirement %v", cov, config.Default))
+			debugInfo = append(debugInfo, "  - Default coverage not satisfied")
+		} else {
+			debugInfo = append(debugInfo, "  - Default coverage not satisfied")
+		}
+	}
+
+	return errors, debugInfo
 }
 
 const configFile = "golang-coverage-pre-commit.yaml"

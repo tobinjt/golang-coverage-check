@@ -81,7 +81,7 @@ filenames:
 }
 
 func TestParseCoverageOutputSuccess(t *testing.T) {
-	input := strings.Trim(`
+	input := `
 github.com/.../golang-coverage-pre-commit.go:26:		String			100.0%
 github.com/.../golang-coverage-pre-commit.go:48:		String			31.0%
 github.com/.../golang-coverage-pre-commit.go:53:		makeExampleConfig	50.0%
@@ -89,7 +89,7 @@ github.com/.../golang-coverage-pre-commit.go:95:		parseYAMLConfig		100.0%
 github.com/.../golang-coverage-pre-commit.go:118:	realMain		17.3%
 github.com/.../golang-coverage-pre-commit.go:140:	main			0.0%
 total:											(statements)		38.1%
-`, "\n")
+`
 	results, err := parseCoverageOutput(strings.Split(input, "\n"))
 	assert.Nil(t, err)
 	assert.Equal(t, 6, len(results))
@@ -130,12 +130,12 @@ total:											(statements)		38.1%
 }
 
 func TestParseCoverageOutputFailure(t *testing.T) {
-	badInputLine := strings.Trim(`
+	badInputLine := `
 github.com/.../golang-coverage-pre-commit.go:26:		String			100.0%
 asdf
 github.com/.../golang-coverage-pre-commit.go:140:	main			0.0%
 total:											(statements)		38.1%
-`, "\n")
+`
 	_, err := parseCoverageOutput(strings.Split(badInputLine, "\n"))
 	if assert.Error(t, err) {
 		assert.Contains(t, err.Error(), "expected 3 parts, found 1")
@@ -186,8 +186,8 @@ functions:
     coverage: 50
   - comment: All the fooOrDie() functions should be fully tested because they panic()
         on failure
-    regex: ^.*OrDie$
-    coverage: 50
+    regex: OrDie$
+    coverage: 100
 filenames:
   - comment: 'TODO: improve test coverage for parse_json.go'
     regex: ^parse_json.go$
@@ -197,4 +197,76 @@ filenames:
     coverage: 100
 `, "\n")
 	assert.Equal(t, expected, makeExampleConfig())
+}
+
+func splitAndStripComments(input string) []string {
+	output := []string{}
+	for _, line := range strings.Split(input, "\n") {
+		if !strings.HasPrefix(line, "//") {
+			output = append(output, line)
+		}
+	}
+	return output
+}
+
+func TestCheckCoverage(t *testing.T) {
+	config, err := parseYAMLConfig([]byte(makeExampleConfig()))
+	assert.Nil(t, err)
+	config.Comment = "Config for testing checkCoverage()"
+
+	tests := []struct {
+		input  string
+		desc   string
+		errors []string
+	}{
+		{
+			desc:   "Function matching",
+			errors: []string{"coverage is too low: 57.0 < 100.0"},
+			input: `
+// Matches OrDie$, coverage too low.
+utils.go:1:	ReadFileOrDie	57.0%
+// Matches OrDie$, coverage acceptable.
+utils.go:1:	ParseIntOrDie	100.0%
+`,
+		},
+		{
+			desc: "Filename matching",
+			errors: []string{
+				"coverage is too low: 53.0 < 73.0:",
+				"coverage is too low: 83.0 < 100.0",
+			},
+			input: `
+// Matches ^parse_json.go$, coverage too low.
+parse_json.go:1:	Foo	53.0%
+// Matches ^parse_json.go$, coverage acceptable.  Ensures that ^parse.*.go$ isn't hit.
+parse_json.go:1:	Bar	80.0%
+// Matches ^parse_.*.go$, coverage too low.
+parse_yaml.go:1:	Baz	83.0%
+// Matches ^parse_.*.go$, coverage acceptable.
+parse_yaml.go:1:	Qwerty	100.0%
+`,
+		},
+		{
+			desc:   "Default matching",
+			errors: []string{"line utils.go:\tFoo\t57.0% did not meet default coverage requirement 80"},
+			input: `
+// Matches nothing, coverage too low.
+utils.go:1:	Foo	57.0%
+// Matches nothing, coverage acceptable.
+utils.go:1:	Bar	100.0%
+`,
+		},
+	}
+
+	for _, test := range tests {
+		coverage, err := parseCoverageOutput(splitAndStripComments(test.input))
+		assert.Nil(t, err)
+		errors, debugInfo := checkCoverage(config, coverage)
+		messages := fmt.Sprintf("%s\n\n%v\n\n%s", test.desc, errors, strings.Join(debugInfo, "\n"))
+		if assert.Equal(t, len(test.errors), len(errors), messages) {
+			for i := range test.errors {
+				assert.Contains(t, errors[i].Error(), test.errors[i])
+			}
+		}
+	}
 }
