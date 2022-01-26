@@ -4,11 +4,31 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// Options contains all the flags and dependency-injected functions used in
+// this program.  It exists so that tests can easily replace flags and
+// functions to trigger failure handling.
+type Options struct {
+	// Used by goCover to run binaries and capture their stdout.
+	captureOutput func(string, ...string) ([]string, error)
+	createTemp    func(string, string) (*os.File, error)
+}
+
+// newOptions returns an Options struct with all the fields set to standard
+// values.
+func newOptions() Options {
+	return Options{
+		captureOutput: captureOutput,
+		createTemp:    os.CreateTemp,
+	}
+}
 
 // Rule represents a single function or filename rule.
 type Rule struct {
@@ -214,6 +234,33 @@ Coverage:
 	return errors, debugInfo
 }
 
+// captureOutput runs a command and returns the output on success and an error
+// on failue.
+func captureOutput(command string, args ...string) ([]string, error) {
+	cmd := exec.Command(command, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return []string{}, fmt.Errorf("failed running `%s`: %w\n%s", cmd, err, output)
+	}
+	return strings.Split(string(output), "\n"), nil
+}
+
+// goCover runs the commands to generate coverage and returns that output.
+func goCover(options Options) ([]string, error) {
+	file, err := options.createTemp("", "golang-coverage-pre-commit")
+	if err != nil {
+		return []string{}, err
+	}
+	defer os.Remove(file.Name())
+
+	_, err = options.captureOutput("go", "test", "--covermode", "set", "--coverprofile", file.Name())
+	if err != nil {
+		return []string{}, err
+	}
+
+	return options.captureOutput("go", "tool", "cover", "--func", file.Name())
+}
+
 const configFile = "golang-coverage-pre-commit.yaml"
 
 var exampleConfig = flag.Bool("example_config", false, "output an example config and exit")
@@ -232,11 +279,18 @@ func realMain(args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed reading config %v: %w", configFile, err)
 	}
-	config, err := parseYAMLConfig(bytes)
+	_, err = parseYAMLConfig(bytes)
 	if err != nil {
 		return "", fmt.Errorf("failed parsing config %v: %w", configFile, err)
 	}
-	fmt.Printf("%v", config)
+	// fmt.Printf("%v", config)
+
+	options := newOptions()
+	output, err := goCover(options)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("%v", output)
 	return "", nil
 }
 

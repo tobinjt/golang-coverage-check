@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -269,4 +271,57 @@ utils.go:1:	Bar	100.0%
 			}
 		}
 	}
+}
+
+func TestCaptureOutput(t *testing.T) {
+	output, err := captureOutput("cat", "/non-existent")
+	assert.Error(t, err)
+	assert.Empty(t, output)
+	assert.Contains(t, err.Error(), "cat: /non-existent: No such file or directory")
+
+	output, err = captureOutput("cat", "/etc/passwd")
+	assert.Nil(t, err)
+	rootLines := []string{}
+	for _, line := range output {
+		if strings.HasPrefix(line, "root:") {
+			rootLines = append(rootLines, line)
+		}
+	}
+	assert.Len(t, rootLines, 1)
+}
+
+func TestGoCoverSuccess(t *testing.T) {
+	fakeOutput := map[string][]string{
+		"test": []string{"completely", "ignored"},
+		"tool": []string{"expected return value"},
+	}
+	options := newOptions()
+	options.captureOutput = func(command string, args ...string) ([]string, error) {
+		return fakeOutput[args[0]], nil
+	}
+	actual, err := goCover(options)
+	assert.Nil(t, err)
+	assert.Equal(t, fakeOutput["tool"], actual)
+}
+
+func TestGoCoverCaptureFailure(t *testing.T) {
+	options := newOptions()
+	options.captureOutput = func(string, ...string) ([]string, error) {
+		return []string{"this should not be seen"}, errors.New("error for testing")
+	}
+	actual, err := goCover(options)
+	assert.Error(t, err)
+	assert.Equal(t, []string{}, actual)
+	assert.Contains(t, err.Error(), "error for testing")
+}
+
+func TestGoCoverCreateTempFailure(t *testing.T) {
+	options := newOptions()
+	options.createTemp = func(string, string) (*os.File, error) {
+		return nil, errors.New("error for testing")
+	}
+	actual, err := goCover(options)
+	assert.Error(t, err)
+	assert.Equal(t, []string{}, actual)
+	assert.Contains(t, err.Error(), "error for testing")
 }
