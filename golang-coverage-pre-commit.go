@@ -45,8 +45,7 @@ type Rule struct {
 }
 
 func (rule Rule) String() string {
-	bytes, _ := yaml.Marshal(&rule)
-	return string(bytes)
+	return fmt.Sprintf("Regex: %v Coverage: %v Comment: %v", rule.Regex, rule.Coverage, rule.Comment)
 }
 
 // Config represents an entire user config.
@@ -264,6 +263,7 @@ func goCover(options Options) ([]string, error) {
 const configFile = "golang-coverage-pre-commit.yaml"
 
 var exampleConfig = flag.Bool("example_config", false, "output an example config and exit")
+var debug = flag.Bool("debug", false, "output debugging information about matching coverage lines to rules")
 
 func realMain(args []string) (string, error) {
 	if len(args) > 0 {
@@ -275,22 +275,37 @@ func realMain(args []string) (string, error) {
 	if _, err := os.Stat(configFile); err != nil {
 		return "", fmt.Errorf("missing config: %v\n\n%v", configFile, makeExampleConfig())
 	}
+
 	bytes, err := os.ReadFile(configFile)
 	if err != nil {
 		return "", fmt.Errorf("failed reading config %v: %w", configFile, err)
 	}
-	_, err = parseYAMLConfig(bytes)
+	config, err := parseYAMLConfig(bytes)
 	if err != nil {
 		return "", fmt.Errorf("failed parsing config %v: %w", configFile, err)
 	}
-	// fmt.Printf("%v", config)
 
 	options := newOptions()
-	output, err := goCover(options)
+	rawCoverage, err := goCover(options)
 	if err != nil {
 		return "", err
 	}
-	fmt.Printf("%v", output)
+	parsedCoverage, err := parseCoverageOutput(rawCoverage)
+	if err != nil {
+		return "", err
+	}
+
+	errors, debugInfo := checkCoverage(config, parsedCoverage)
+	if len(errors) > 0 {
+		for _, err = range errors {
+			fmt.Println(err)
+		}
+	}
+	if *debug && len(debugInfo) > 0 {
+		for _, d := range debugInfo {
+			fmt.Println(d)
+		}
+	}
 	return "", nil
 }
 
