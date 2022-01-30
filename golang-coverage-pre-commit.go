@@ -167,31 +167,32 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 		if parts[0] == "total:" {
 			continue
 		}
-		matches := percentageExtractor.FindStringSubmatch(parts[2])
-		if len(matches) == 0 {
-			return []CoverageLine{}, fmt.Errorf("could not extract percentage from \"%v\"", parts[2])
-		}
+		rawFilename, rawFunction, rawPercentage := parts[0], parts[1], parts[2]
 
+		matches := percentageExtractor.FindStringSubmatch(rawPercentage)
+		if len(matches) == 0 {
+			return []CoverageLine{}, fmt.Errorf("could not extract percentage from \"%v\"", rawPercentage)
+		}
 		percentage, err := strconv.ParseFloat(matches[1], 64)
 		if err != nil {
-			return []CoverageLine{}, fmt.Errorf("failed parsing \"%v\": %w", parts[2], err)
+			return []CoverageLine{}, fmt.Errorf("failed parsing \"%v\": %w", rawPercentage, err)
 		}
 		if percentage > 100 {
-			return []CoverageLine{}, fmt.Errorf("percentage > 100 in \"%v\"", parts[2])
+			return []CoverageLine{}, fmt.Errorf("percentage (%v) > 100 in \"%v\"", percentage, rawPercentage)
 		}
 		if percentage < 0 {
-			return []CoverageLine{}, fmt.Errorf("percentage < 0 in \"%v\"", parts[2])
+			return []CoverageLine{}, fmt.Errorf("percentage (%v) < 0 in \"%v\"", percentage, rawPercentage)
 		}
 
-		fileLineParts := strings.Split(parts[0], ":")
+		fileLineParts := strings.Split(rawFilename, ":")
 		if len(fileLineParts) != 3 {
-			return []CoverageLine{}, fmt.Errorf("percentage < 0 in \"%v\"", parts[2])
+			return []CoverageLine{}, fmt.Errorf("expected `filename:linenumber:` in \"%v\"", rawFilename)
 		}
 
 		results = append(results, CoverageLine{
 			Filename:   strings.TrimPrefix(fileLineParts[0], options.modulePath),
 			LineNumber: fileLineParts[1],
-			Function:   parts[1],
+			Function:   rawFunction,
 			Coverage:   percentage,
 		})
 	}
@@ -211,7 +212,7 @@ Coverage:
 			if function.compiledRegex.MatchString(cov.Function) {
 				debugInfo = append(debugInfo, fmt.Sprintf("  - Function match: %v", function))
 				if cov.Coverage < function.Coverage {
-					errors = append(errors, fmt.Errorf("coverage is too low: %.1f < %.1f: line \"%v\" function rule %v", cov.Coverage, function.Coverage, cov, function))
+					errors = append(errors, fmt.Errorf("%v: coverage %.1f%% < %.1f%%: matching function rule is `%v`", cov, cov.Coverage, function.Coverage, function))
 				}
 				continue Coverage
 			} else {
@@ -223,7 +224,7 @@ Coverage:
 			if filename.compiledRegex.MatchString(cov.Filename) {
 				debugInfo = append(debugInfo, fmt.Sprintf("  - Filename match: %v", filename))
 				if cov.Coverage < filename.Coverage {
-					errors = append(errors, fmt.Errorf("coverage is too low: %.1f < %.1f: line \"%v\" filename rule %v", cov.Coverage, filename.Coverage, cov, filename))
+					errors = append(errors, fmt.Errorf("%v: coverage %.1f%% < %.1f%%: matching filename rule is `%v`", cov, cov.Coverage, filename.Coverage, filename))
 				}
 				continue Coverage
 			} else {
@@ -232,7 +233,7 @@ Coverage:
 		}
 
 		if cov.Coverage < config.Default {
-			errors = append(errors, fmt.Errorf("line %v did not meet default coverage requirement %v", cov, config.Default))
+			errors = append(errors, fmt.Errorf("%v: coverage %.1f%% < %.1f%%: default coverage requirement %.1f%%", cov, cov.Coverage, config.Default, config.Default))
 			debugInfo = append(debugInfo, "  - Default coverage not satisfied")
 		} else {
 			debugInfo = append(debugInfo, "  - Default coverage not satisfied")

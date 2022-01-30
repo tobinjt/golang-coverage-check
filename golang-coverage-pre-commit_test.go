@@ -140,17 +140,22 @@ total:											(statements)		38.1%
 }
 
 func TestParseCoverageOutputFailure(t *testing.T) {
+	options := newOptions()
+
 	badInputLine := `
 github.com/.../golang-coverage-pre-commit.go:26:		String			100.0%
 asdf
 github.com/.../golang-coverage-pre-commit.go:140:	main			0.0%
 total:											(statements)		38.1%
 `
-	options := newOptions()
 	_, err := parseCoverageOutput(options, strings.Split(badInputLine, "\n"))
-	if assert.Error(t, err) {
-		assert.Contains(t, err.Error(), "expected 3 parts, found 1")
-	}
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expected 3 parts, found 1")
+
+	badInputLine = `missing-line-number:		String			100.0%`
+	_, err = parseCoverageOutput(options, []string{badInputLine})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expected `filename:linenumber:` in \"missing-line-number:\"")
 
 	table := []struct {
 		input string
@@ -169,11 +174,11 @@ total:											(statements)		38.1%
 			input: "asdf%",
 		},
 		{
-			err:   "percentage < 0",
+			err:   "percentage (-12.2) < 0",
 			input: "-12.2%",
 		},
 		{
-			err:   "percentage > 100",
+			err:   "percentage (105.3) > 100",
 			input: "105.3%",
 		},
 	}
@@ -232,7 +237,7 @@ func TestCheckCoverage(t *testing.T) {
 	}{
 		{
 			desc:   "Function matching",
-			errors: []string{"coverage is too low: 57.0 < 100.0"},
+			errors: []string{"utils.go:1:\tReadFileOrDie\t57.0%: coverage 57.0% < 100.0%: matching function rule"},
 			input: `
 // Matches OrDie$, coverage too low.
 utils.go:1:	ReadFileOrDie	57.0%
@@ -243,8 +248,8 @@ utils.go:1:	ParseIntOrDie	100.0%
 		{
 			desc: "Filename matching",
 			errors: []string{
-				"coverage is too low: 53.0 < 73.0:",
-				"coverage is too low: 83.0 < 100.0",
+				"parse_json.go:1:\tFoo\t53.0%: coverage 53.0% < 73.0%: matching filename rule is",
+				"parse_yaml.go:1:\tBaz\t83.0%: coverage 83.0% < 100.0%: matching filename rule is",
 			},
 			input: `
 // Matches ^parse_json.go$, coverage too low.
@@ -259,7 +264,7 @@ parse_yaml.go:1:	Qwerty	100.0%
 		},
 		{
 			desc:   "Default matching",
-			errors: []string{"line utils.go:1:\tFoo\t57.0% did not meet default coverage requirement 80"},
+			errors: []string{"utils.go:1:\tFoo\t57.0%: coverage 57.0% < 80.0%: default coverage requirement 80.0%"},
 			input: `
 // Matches nothing, coverage too low.
 utils.go:1:	Foo	57.0%
@@ -277,7 +282,7 @@ utils.go:1:	Bar	100.0%
 		messages := fmt.Sprintf("%s\n\n%v\n\n%s", test.desc, errors, strings.Join(debugInfo, "\n"))
 		if assert.Equal(t, len(test.errors), len(errors), messages) {
 			for i := range test.errors {
-				assert.Contains(t, errors[i].Error(), test.errors[i])
+				assert.Contains(t, errors[i].Error(), test.errors[i], test.desc)
 			}
 		}
 	}
