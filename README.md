@@ -52,10 +52,10 @@ Each line of coverage output is independently evaluated:
 
 - The function name is matched against each `function` regex, in the order
   they're listed in the config, with the first match winning.
-- If the function name wasn't matched, the filename (with the current directory
-  removed) is matched against each `filename` regex, in the order they're listed
-  in the config, with the first match winning. Note that filenames use regex
-  matching, _not_ globs.
+- If the function name wasn't matched, the filename (with the line number and
+  the module name from `go.mod` removed) is matched against each `filename`
+  regex, in the order they're listed in the config, with the first match
+  winning. Note that filenames use regex matching, _not_ globs.
 - If neither the function name or the filename was matched, `default` is used.
 
 ## FAQ

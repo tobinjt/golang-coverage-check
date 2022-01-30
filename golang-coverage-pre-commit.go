@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,6 +20,7 @@ type Options struct {
 	// Used by goCover to run binaries and capture their stdout.
 	captureOutput func(string, ...string) ([]string, error)
 	createTemp    func(string, string) (*os.File, error)
+	modulePath    string
 }
 
 // newOptions returns an Options struct with all the fields set to standard
@@ -132,9 +134,10 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 
 // CoverageLine represents a single line of coverage output.
 type CoverageLine struct {
-	// Filename is the name of the source file, with the directory portion
-	// and the .go extension removed.
+	// Filename is the name of the source file, with the module path removed.
 	Filename string
+	// LineNumber is the line number the function can be found at.
+	LineNumber string
 	// Function is the name of the function.
 	Function string
 	// Coverage is the coverage percentage.
@@ -142,15 +145,14 @@ type CoverageLine struct {
 }
 
 func (coverage CoverageLine) String() string {
-	return fmt.Sprintf("%s:\t%s\t%.1f%%", coverage.Filename, coverage.Function, coverage.Coverage)
+	return fmt.Sprintf("%s:%s:\t%s\t%.1f%%", coverage.Filename, coverage.LineNumber, coverage.Function, coverage.Coverage)
 }
 
 // parseCoverageOutput parses all the coverage lines and turns each into a
 // CoverageLine.
-func parseCoverageOutput(output []string) ([]CoverageLine, error) {
+func parseCoverageOutput(options Options, output []string) ([]CoverageLine, error) {
 	results := []CoverageLine{}
 	lineSplitter := regexp.MustCompile(`\t+`)
-	lineNumberRemover := regexp.MustCompile(`:\d+:$`)
 	percentageExtractor := regexp.MustCompile(`^(.*)%$`)
 
 	for i := range output {
@@ -160,30 +162,37 @@ func parseCoverageOutput(output []string) ([]CoverageLine, error) {
 		}
 		parts := lineSplitter.Split(output[i], -1)
 		if len(parts) != 3 {
-			return results, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
+			return []CoverageLine{}, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
 		}
 		if parts[0] == "total:" {
 			continue
 		}
 		matches := percentageExtractor.FindStringSubmatch(parts[2])
 		if len(matches) == 0 {
-			return results, fmt.Errorf("could not extract percentage from \"%v\"", parts[2])
+			return []CoverageLine{}, fmt.Errorf("could not extract percentage from \"%v\"", parts[2])
 		}
+
 		percentage, err := strconv.ParseFloat(matches[1], 64)
 		if err != nil {
-			return results, fmt.Errorf("failed parsing \"%v\": %w", parts[2], err)
+			return []CoverageLine{}, fmt.Errorf("failed parsing \"%v\": %w", parts[2], err)
 		}
 		if percentage > 100 {
-			return results, fmt.Errorf("percentage > 100 in \"%v\"", parts[2])
+			return []CoverageLine{}, fmt.Errorf("percentage > 100 in \"%v\"", parts[2])
 		}
 		if percentage < 0 {
-			return results, fmt.Errorf("percentage < 0 in \"%v\"", parts[2])
+			return []CoverageLine{}, fmt.Errorf("percentage < 0 in \"%v\"", parts[2])
+		}
+
+		fileLineParts := strings.Split(parts[0], ":")
+		if len(fileLineParts) != 3 {
+			return []CoverageLine{}, fmt.Errorf("percentage < 0 in \"%v\"", parts[2])
 		}
 
 		results = append(results, CoverageLine{
-			Filename: lineNumberRemover.ReplaceAllLiteralString(parts[0], ""),
-			Function: parts[1],
-			Coverage: percentage,
+			Filename:   strings.TrimPrefix(fileLineParts[0], options.modulePath),
+			LineNumber: fileLineParts[1],
+			Function:   parts[1],
+			Coverage:   percentage,
 		})
 	}
 	return results, nil
@@ -275,22 +284,31 @@ func realMain(args []string) (string, error) {
 	if _, err := os.Stat(configFile); err != nil {
 		return "", fmt.Errorf("missing config: %v\n\n%v", configFile, makeExampleConfig())
 	}
+	if _, err := os.Stat("go.mod"); err != nil {
+		return "", fmt.Errorf("missing go.mod")
+	}
 
-	bytes, err := os.ReadFile(configFile)
+	options := newOptions()
+	modBytes, err := os.ReadFile("go.mod")
+	if err != nil {
+		return "", fmt.Errorf("failed reading go.mod: %w", err)
+	}
+	options.modulePath = modfile.ModulePath(modBytes) + "/"
+
+	configBytes, err := os.ReadFile(configFile)
 	if err != nil {
 		return "", fmt.Errorf("failed reading config %v: %w", configFile, err)
 	}
-	config, err := parseYAMLConfig(bytes)
+	config, err := parseYAMLConfig(configBytes)
 	if err != nil {
 		return "", fmt.Errorf("failed parsing config %v: %w", configFile, err)
 	}
 
-	options := newOptions()
 	rawCoverage, err := goCover(options)
 	if err != nil {
 		return "", err
 	}
-	parsedCoverage, err := parseCoverageOutput(rawCoverage)
+	parsedCoverage, err := parseCoverageOutput(options, rawCoverage)
 	if err != nil {
 		return "", err
 	}

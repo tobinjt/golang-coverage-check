@@ -84,48 +84,56 @@ filenames:
 
 func TestParseCoverageOutputSuccess(t *testing.T) {
 	input := `
-github.com/.../golang-coverage-pre-commit.go:26:		String			100.0%
-github.com/.../golang-coverage-pre-commit.go:48:		String			31.0%
-github.com/.../golang-coverage-pre-commit.go:53:		makeExampleConfig	50.0%
-github.com/.../golang-coverage-pre-commit.go:95:		parseYAMLConfig		100.0%
-github.com/.../golang-coverage-pre-commit.go:118:	realMain		17.3%
-github.com/.../golang-coverage-pre-commit.go:140:	main			0.0%
+github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:26:		String			100.0%
+github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:48:		String			31.0%
+github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:53:		makeExampleConfig	50.0%
+github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:95:		parseYAMLConfig		100.0%
+github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:118:	realMain		17.3%
+github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:140:	main			0.0%
 total:											(statements)		38.1%
 `
-	results, err := parseCoverageOutput(strings.Split(input, "\n"))
+	options := newOptions()
+	options.modulePath = "github.com/tobinjt/golang-coverage-pre-commit/"
+	results, err := parseCoverageOutput(options, strings.Split(input, "\n"))
 	assert.Nil(t, err)
 	assert.Equal(t, 6, len(results))
 
 	expected := []CoverageLine{
 		{
-			Filename: "github.com/.../golang-coverage-pre-commit.go",
-			Function: "String",
-			Coverage: 100.0,
+			Filename:   "golang-coverage-pre-commit.go",
+			LineNumber: "26",
+			Function:   "String",
+			Coverage:   100.0,
 		},
 		{
-			Filename: "github.com/.../golang-coverage-pre-commit.go",
-			Function: "String",
-			Coverage: 31.0,
+			Filename:   "golang-coverage-pre-commit.go",
+			LineNumber: "48",
+			Function:   "String",
+			Coverage:   31.0,
 		},
 		{
-			Filename: "github.com/.../golang-coverage-pre-commit.go",
-			Function: "makeExampleConfig",
-			Coverage: 50.0,
+			Filename:   "golang-coverage-pre-commit.go",
+			LineNumber: "53",
+			Function:   "makeExampleConfig",
+			Coverage:   50.0,
 		},
 		{
-			Filename: "github.com/.../golang-coverage-pre-commit.go",
-			Function: "parseYAMLConfig",
-			Coverage: 100.0,
+			Filename:   "golang-coverage-pre-commit.go",
+			LineNumber: "95",
+			Function:   "parseYAMLConfig",
+			Coverage:   100.0,
 		},
 		{
-			Filename: "github.com/.../golang-coverage-pre-commit.go",
-			Function: "realMain",
-			Coverage: 17.3,
+			Filename:   "golang-coverage-pre-commit.go",
+			LineNumber: "118",
+			Function:   "realMain",
+			Coverage:   17.3,
 		},
 		{
-			Filename: "github.com/.../golang-coverage-pre-commit.go",
-			Function: "main",
-			Coverage: 0.0,
+			Filename:   "golang-coverage-pre-commit.go",
+			LineNumber: "140",
+			Function:   "main",
+			Coverage:   0.0,
 		},
 	}
 	assert.Equal(t, expected, results)
@@ -138,7 +146,8 @@ asdf
 github.com/.../golang-coverage-pre-commit.go:140:	main			0.0%
 total:											(statements)		38.1%
 `
-	_, err := parseCoverageOutput(strings.Split(badInputLine, "\n"))
+	options := newOptions()
+	_, err := parseCoverageOutput(options, strings.Split(badInputLine, "\n"))
 	if assert.Error(t, err) {
 		assert.Contains(t, err.Error(), "expected 3 parts, found 1")
 	}
@@ -170,7 +179,7 @@ total:											(statements)		38.1%
 	}
 	for _, test := range table {
 		input := fmt.Sprintf("foo.go:26:		String			%s", test.input)
-		_, err := parseCoverageOutput([]string{input})
+		_, err := parseCoverageOutput(options, []string{input})
 		if assert.Error(t, err, test.input) {
 			assert.Contains(t, err.Error(), test.err)
 		}
@@ -250,7 +259,7 @@ parse_yaml.go:1:	Qwerty	100.0%
 		},
 		{
 			desc:   "Default matching",
-			errors: []string{"line utils.go:\tFoo\t57.0% did not meet default coverage requirement 80"},
+			errors: []string{"line utils.go:1:\tFoo\t57.0% did not meet default coverage requirement 80"},
 			input: `
 // Matches nothing, coverage too low.
 utils.go:1:	Foo	57.0%
@@ -260,8 +269,9 @@ utils.go:1:	Bar	100.0%
 		},
 	}
 
+	options := newOptions()
 	for _, test := range tests {
-		coverage, err := parseCoverageOutput(splitAndStripComments(test.input))
+		coverage, err := parseCoverageOutput(options, splitAndStripComments(test.input))
 		assert.Nil(t, err)
 		errors, debugInfo := checkCoverage(config, coverage)
 		messages := fmt.Sprintf("%s\n\n%v\n\n%s", test.desc, errors, strings.Join(debugInfo, "\n"))
