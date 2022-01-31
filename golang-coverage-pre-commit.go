@@ -131,18 +131,18 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 		return config, fmt.Errorf("failed parsing YAML: %w", err)
 	}
 	if config.Default < 0 || config.Default > 100 {
-		return config, fmt.Errorf("default coverage is outside the range 0-100")
+		return config, fmt.Errorf("default coverage (%.1f) is outside the range 0-100", config.Default)
 	}
 	for i := range config.Functions {
 		config.Functions[i].compiledRegex = regexp.MustCompile(config.Functions[i].Regex)
 		if config.Functions[i].Coverage < 0 || config.Functions[i].Coverage > 100 {
-			return config, fmt.Errorf("coverage is outside the range 0-100 in %v", config.Functions[i])
+			return config, fmt.Errorf("coverage (%.1f) is outside the range 0-100 in %v", config.Functions[i].Coverage, config.Functions[i])
 		}
 	}
 	for i := range config.Filenames {
 		config.Filenames[i].compiledRegex = regexp.MustCompile(config.Filenames[i].Regex)
 		if config.Filenames[i].Coverage < 0 || config.Filenames[i].Coverage > 100 {
-			return config, fmt.Errorf("coverage is outside the range 0-100 in %v", config.Filenames[i])
+			return config, fmt.Errorf("coverage (%.1f) is outside the range 0-100 in %v", config.Filenames[i].Coverage, config.Filenames[i])
 		}
 	}
 	return config, nil
@@ -202,7 +202,7 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 		}
 		percentage, err := strconv.ParseFloat(matches[1], 64)
 		if err != nil {
-			return []CoverageLine{}, fmt.Errorf("failed parsing \"%v\": %w", rawPercentage, err)
+			return []CoverageLine{}, fmt.Errorf("failed parsing \"%v\" as a float: %w", rawPercentage, err)
 		}
 		if percentage > 100 {
 			return []CoverageLine{}, fmt.Errorf("percentage (%v) > 100 in \"%v\"", percentage, rawPercentage)

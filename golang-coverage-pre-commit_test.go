@@ -44,11 +44,11 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 			input: "asdf",
 		},
 		{
-			err:   "default coverage is outside the range 0-100",
+			err:   "default coverage (101.0) is outside the range 0-100",
 			input: "default: 101",
 		},
 		{
-			err: "coverage is outside the range 0-100 in",
+			err: "coverage (1234.0) is outside the range 0-100 in",
 			input: `
 				default: 99
 				functions:
@@ -56,7 +56,7 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 				    coverage: 1234`,
 		},
 		{
-			err: "coverage is outside the range 0-100 in",
+			err: "coverage (-1.0) is outside the range 0-100 in",
 			input: `
 				default: 99
 				filenames:
