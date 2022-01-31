@@ -10,6 +10,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestMakeExampleConfig(t *testing.T) {
+	expected := strings.TrimLeft(`
+comment: Comment is not interpreted or used; it is provided as a structured way of
+    adding comments to a config, so that automated editing is easier.
+default: 80
+functions:
+  - comment: Low coverage is acceptable for main()
+    regex: ^main$
+    coverage: 50
+  - comment: All the fooOrDie() functions should be fully tested because they panic()
+        on failure
+    regex: OrDie$
+    coverage: 100
+filenames:
+  - comment: 'TODO: improve test coverage for parse_json.go'
+    regex: ^parse_json.go$
+    coverage: 73
+  - comment: Full coverage for other parsers
+    regex: ^parse.*.go$
+    coverage: 100
+`, "\n")
+	assert.Equal(t, expected, makeExampleConfig())
+}
+
 func TestParseYAMLConfigErrors(t *testing.T) {
 	table := []struct {
 		input string
@@ -80,6 +104,59 @@ filenames:
 	assert.Equal(t, 75.0, config.Default)
 	assert.Equal(t, 2, len(config.Functions))
 	assert.Equal(t, "pinky", config.Functions[0].Regex)
+}
+
+func TestCaptureOutput(t *testing.T) {
+	output, err := captureOutput("cat", "/non-existent")
+	assert.Error(t, err)
+	assert.Empty(t, output)
+	assert.Contains(t, err.Error(), "cat: /non-existent: No such file or directory")
+
+	output, err = captureOutput("cat", "/etc/passwd")
+	assert.Nil(t, err)
+	rootLines := []string{}
+	for _, line := range output {
+		if strings.HasPrefix(line, "root:") {
+			rootLines = append(rootLines, line)
+		}
+	}
+	assert.Len(t, rootLines, 1)
+}
+
+func TestGoCoverSuccess(t *testing.T) {
+	fakeOutput := map[string][]string{
+		"test": []string{"completely", "ignored"},
+		"tool": []string{"expected return value"},
+	}
+	options := newOptions()
+	options.captureOutput = func(command string, args ...string) ([]string, error) {
+		return fakeOutput[args[0]], nil
+	}
+	actual, err := goCover(options)
+	assert.Nil(t, err)
+	assert.Equal(t, fakeOutput["tool"], actual)
+}
+
+func TestGoCoverCaptureFailure(t *testing.T) {
+	options := newOptions()
+	options.captureOutput = func(string, ...string) ([]string, error) {
+		return []string{"this should not be seen"}, errors.New("error for testing")
+	}
+	actual, err := goCover(options)
+	assert.Error(t, err)
+	assert.Equal(t, []string{}, actual)
+	assert.Contains(t, err.Error(), "error for testing")
+}
+
+func TestGoCoverCreateTempFailure(t *testing.T) {
+	options := newOptions()
+	options.createTemp = func(string, string) (*os.File, error) {
+		return nil, errors.New("error for testing")
+	}
+	actual, err := goCover(options)
+	assert.Error(t, err)
+	assert.Equal(t, []string{}, actual)
+	assert.Contains(t, err.Error(), "error for testing")
 }
 
 func TestParseCoverageOutputSuccess(t *testing.T) {
@@ -191,30 +268,6 @@ total:											(statements)		38.1%
 	}
 }
 
-func TestMakeExampleConfig(t *testing.T) {
-	expected := strings.TrimLeft(`
-comment: Comment is not interpreted or used; it is provided as a structured way of
-    adding comments to a config, so that automated editing is easier.
-default: 80
-functions:
-  - comment: Low coverage is acceptable for main()
-    regex: ^main$
-    coverage: 50
-  - comment: All the fooOrDie() functions should be fully tested because they panic()
-        on failure
-    regex: OrDie$
-    coverage: 100
-filenames:
-  - comment: 'TODO: improve test coverage for parse_json.go'
-    regex: ^parse_json.go$
-    coverage: 73
-  - comment: Full coverage for other parsers
-    regex: ^parse.*.go$
-    coverage: 100
-`, "\n")
-	assert.Equal(t, expected, makeExampleConfig())
-}
-
 func splitAndStripComments(input string) []string {
 	output := []string{}
 	for _, line := range strings.Split(input, "\n") {
@@ -286,57 +339,4 @@ utils.go:1:	Bar	100.0%
 			}
 		}
 	}
-}
-
-func TestCaptureOutput(t *testing.T) {
-	output, err := captureOutput("cat", "/non-existent")
-	assert.Error(t, err)
-	assert.Empty(t, output)
-	assert.Contains(t, err.Error(), "cat: /non-existent: No such file or directory")
-
-	output, err = captureOutput("cat", "/etc/passwd")
-	assert.Nil(t, err)
-	rootLines := []string{}
-	for _, line := range output {
-		if strings.HasPrefix(line, "root:") {
-			rootLines = append(rootLines, line)
-		}
-	}
-	assert.Len(t, rootLines, 1)
-}
-
-func TestGoCoverSuccess(t *testing.T) {
-	fakeOutput := map[string][]string{
-		"test": []string{"completely", "ignored"},
-		"tool": []string{"expected return value"},
-	}
-	options := newOptions()
-	options.captureOutput = func(command string, args ...string) ([]string, error) {
-		return fakeOutput[args[0]], nil
-	}
-	actual, err := goCover(options)
-	assert.Nil(t, err)
-	assert.Equal(t, fakeOutput["tool"], actual)
-}
-
-func TestGoCoverCaptureFailure(t *testing.T) {
-	options := newOptions()
-	options.captureOutput = func(string, ...string) ([]string, error) {
-		return []string{"this should not be seen"}, errors.New("error for testing")
-	}
-	actual, err := goCover(options)
-	assert.Error(t, err)
-	assert.Equal(t, []string{}, actual)
-	assert.Contains(t, err.Error(), "error for testing")
-}
-
-func TestGoCoverCreateTempFailure(t *testing.T) {
-	options := newOptions()
-	options.createTemp = func(string, string) (*os.File, error) {
-		return nil, errors.New("error for testing")
-	}
-	actual, err := goCover(options)
-	assert.Error(t, err)
-	assert.Equal(t, []string{}, actual)
-	assert.Contains(t, err.Error(), "error for testing")
 }

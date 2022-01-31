@@ -32,6 +32,22 @@ func newOptions() Options {
 	}
 }
 
+// CoverageLine represents a single line of coverage output.
+type CoverageLine struct {
+	// Filename is the name of the source file, with the module path removed.
+	Filename string
+	// LineNumber is the line number the function can be found at.
+	LineNumber string
+	// Function is the name of the function.
+	Function string
+	// Coverage is the coverage percentage.
+	Coverage float64
+}
+
+func (coverage CoverageLine) String() string {
+	return fmt.Sprintf("%s:%s:\t%s\t%.1f%%", coverage.Filename, coverage.LineNumber, coverage.Function, coverage.Coverage)
+}
+
 // Rule represents a single function or filename rule.
 type Rule struct {
 	// Comment is not interpreted or used; it is provided as a structured way of
@@ -132,20 +148,31 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 	return config, nil
 }
 
-// CoverageLine represents a single line of coverage output.
-type CoverageLine struct {
-	// Filename is the name of the source file, with the module path removed.
-	Filename string
-	// LineNumber is the line number the function can be found at.
-	LineNumber string
-	// Function is the name of the function.
-	Function string
-	// Coverage is the coverage percentage.
-	Coverage float64
+// captureOutput runs a command and returns the output on success and an error
+// on failue.
+func captureOutput(command string, args ...string) ([]string, error) {
+	cmd := exec.Command(command, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return []string{}, fmt.Errorf("failed running `%s`: %w\n%s", cmd, err, output)
+	}
+	return strings.Split(string(output), "\n"), nil
 }
 
-func (coverage CoverageLine) String() string {
-	return fmt.Sprintf("%s:%s:\t%s\t%.1f%%", coverage.Filename, coverage.LineNumber, coverage.Function, coverage.Coverage)
+// goCover runs the commands to generate coverage and returns that output.
+func goCover(options Options) ([]string, error) {
+	file, err := options.createTemp("", "golang-coverage-pre-commit")
+	if err != nil {
+		return []string{}, err
+	}
+	defer os.Remove(file.Name())
+
+	_, err = options.captureOutput("go", "test", "--covermode", "set", "--coverprofile", file.Name())
+	if err != nil {
+		return []string{}, err
+	}
+
+	return options.captureOutput("go", "tool", "cover", "--func", file.Name())
 }
 
 // parseCoverageOutput parses all the coverage lines and turns each into a
@@ -241,33 +268,6 @@ Coverage:
 	}
 
 	return errors, debugInfo
-}
-
-// captureOutput runs a command and returns the output on success and an error
-// on failue.
-func captureOutput(command string, args ...string) ([]string, error) {
-	cmd := exec.Command(command, args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return []string{}, fmt.Errorf("failed running `%s`: %w\n%s", cmd, err, output)
-	}
-	return strings.Split(string(output), "\n"), nil
-}
-
-// goCover runs the commands to generate coverage and returns that output.
-func goCover(options Options) ([]string, error) {
-	file, err := options.createTemp("", "golang-coverage-pre-commit")
-	if err != nil {
-		return []string{}, err
-	}
-	defer os.Remove(file.Name())
-
-	_, err = options.captureOutput("go", "test", "--covermode", "set", "--coverprofile", file.Name())
-	if err != nil {
-		return []string{}, err
-	}
-
-	return options.captureOutput("go", "tool", "cover", "--func", file.Name())
 }
 
 const configFile = "golang-coverage-pre-commit.yaml"
