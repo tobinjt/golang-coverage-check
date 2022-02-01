@@ -19,12 +19,13 @@ import (
 type Options struct {
 	// Used by goCover to run binaries and capture their stdout.
 	captureOutput func(string, ...string) ([]string, error)
-	createTemp    func(string, string) (*os.File, error)
-	modulePath    string
+	// Used to create a temporary flie.
+	createTemp func(string, string) (*os.File, error)
+	// Module path extracted from go.mod.
+	modulePath string
 }
 
-// newOptions returns an Options struct with all the fields set to standard
-// values.
+// newOptions returns an Options struct with fields set to standard values.
 func newOptions() Options {
 	return Options{
 		captureOutput: captureOutput,
@@ -66,7 +67,7 @@ func (rule Rule) String() string {
 	return fmt.Sprintf("Regex: %v Coverage: %v Comment: %v", rule.Regex, rule.Coverage, rule.Comment)
 }
 
-// Config represents an entire user config.
+// Config represents an entire user config loaded from golang-coverage-pre-commit.yaml.
 type Config struct {
 	// Comment is not interpreted or used; it is provided as a structured way of
 	// adding comments to a config, so that automated editing is easier.
@@ -88,6 +89,7 @@ func (config Config) String() string {
 	return string(bytes)
 }
 
+// makeExampleConfig creates an example Config and returns the string representation.
 func makeExampleConfig() string {
 	config := Config{
 		Comment: "Comment is not interpreted or used; it is provided as a " +
@@ -149,7 +151,7 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 }
 
 // captureOutput runs a command and returns the output on success and an error
-// on failue.
+// on failure.
 func captureOutput(command string, args ...string) ([]string, error) {
 	cmd := exec.Command(command, args...)
 	output, err := cmd.CombinedOutput()
@@ -227,7 +229,7 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 }
 
 // checkCoverage checks that each function meets the required level of coverage,
-// returning a slice of errors.
+// returning a slice of errors and debugging information.
 func checkCoverage(config Config, coverage []CoverageLine) ([]error, []string) {
 	errors := []error{}
 	debugInfo := []string{"Debug info for coverage matching"}
@@ -242,8 +244,6 @@ Coverage:
 					errors = append(errors, fmt.Errorf("%v: coverage %.1f%% < %.1f%%: matching function rule is `%v`", cov, cov.Coverage, function.Coverage, function))
 				}
 				continue Coverage
-			} else {
-				debugInfo = append(debugInfo, fmt.Sprintf("  - Function non-match: %v", function))
 			}
 		}
 
@@ -254,8 +254,6 @@ Coverage:
 					errors = append(errors, fmt.Errorf("%v: coverage %.1f%% < %.1f%%: matching filename rule is `%v`", cov, cov.Coverage, filename.Coverage, filename))
 				}
 				continue Coverage
-			} else {
-				debugInfo = append(debugInfo, fmt.Sprintf("  - Filename non-match: %v", filename))
 			}
 		}
 
@@ -263,7 +261,7 @@ Coverage:
 			errors = append(errors, fmt.Errorf("%v: coverage %.1f%% < %.1f%%: default coverage requirement %.1f%%", cov, cov.Coverage, config.Default, config.Default))
 			debugInfo = append(debugInfo, "  - Default coverage not satisfied")
 		} else {
-			debugInfo = append(debugInfo, "  - Default coverage not satisfied")
+			debugInfo = append(debugInfo, "  - Default coverage satisfied")
 		}
 	}
 
@@ -281,12 +279,6 @@ func realMain(args []string) (string, error) {
 	}
 	if *exampleConfig {
 		return makeExampleConfig(), nil
-	}
-	if _, err := os.Stat(configFile); err != nil {
-		return "", fmt.Errorf("missing config: %v\n\n%v", configFile, makeExampleConfig())
-	}
-	if _, err := os.Stat("go.mod"); err != nil {
-		return "", fmt.Errorf("missing go.mod")
 	}
 
 	options := newOptions()
