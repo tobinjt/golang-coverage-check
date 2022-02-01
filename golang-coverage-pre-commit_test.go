@@ -331,12 +331,10 @@ utils.go:1:	Bar	100.0%
 	for _, test := range tests {
 		coverage, err := parseCoverageOutput(options, splitAndStripComments(test.input))
 		assert.Nil(t, err)
-		errors, debugInfo := checkCoverage(config, coverage)
-		messages := fmt.Sprintf("%s\n\n%v\n\n%s", test.desc, errors, strings.Join(debugInfo, "\n"))
-		if assert.Equal(t, len(test.errors), len(errors), messages) {
-			for i := range test.errors {
-				assert.Contains(t, errors[i].Error(), test.errors[i], test.desc)
-			}
+		// TODO: Check debugInfo contents.
+		_, err = checkCoverage(config, coverage)
+		for i := range test.errors {
+			assert.Contains(t, err.Error(), test.errors[i], test.desc)
 		}
 	}
 }

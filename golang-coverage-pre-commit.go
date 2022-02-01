@@ -229,9 +229,9 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 }
 
 // checkCoverage checks that each function meets the required level of coverage,
-// returning a slice of errors and debugging information.
-func checkCoverage(config Config, coverage []CoverageLine) ([]error, []string) {
-	errors := []error{}
+// returning debugging information and an error if appropriate.
+func checkCoverage(config Config, coverage []CoverageLine) (string, error) {
+	errors := []string{}
 	debugInfo := []string{"Debug info for coverage matching"}
 
 Coverage:
@@ -241,7 +241,7 @@ Coverage:
 			if function.compiledRegex.MatchString(cov.Function) {
 				debugInfo = append(debugInfo, fmt.Sprintf("  - Function match: %v", function))
 				if cov.Coverage < function.Coverage {
-					errors = append(errors, fmt.Errorf("%v: coverage %.1f%% < %.1f%%: matching function rule is `%v`", cov, cov.Coverage, function.Coverage, function))
+					errors = append(errors, fmt.Sprintf("%v: coverage %.1f%% < %.1f%%: matching function rule is `%v`", cov, cov.Coverage, function.Coverage, function))
 				}
 				continue Coverage
 			}
@@ -251,21 +251,25 @@ Coverage:
 			if filename.compiledRegex.MatchString(cov.Filename) {
 				debugInfo = append(debugInfo, fmt.Sprintf("  - Filename match: %v", filename))
 				if cov.Coverage < filename.Coverage {
-					errors = append(errors, fmt.Errorf("%v: coverage %.1f%% < %.1f%%: matching filename rule is `%v`", cov, cov.Coverage, filename.Coverage, filename))
+					errors = append(errors, fmt.Sprintf("%v: coverage %.1f%% < %.1f%%: matching filename rule is `%v`", cov, cov.Coverage, filename.Coverage, filename))
 				}
 				continue Coverage
 			}
 		}
 
 		if cov.Coverage < config.Default {
-			errors = append(errors, fmt.Errorf("%v: coverage %.1f%% < %.1f%%: default coverage requirement %.1f%%", cov, cov.Coverage, config.Default, config.Default))
+			errors = append(errors, fmt.Sprintf("%v: coverage %.1f%% < %.1f%%: default coverage requirement %.1f%%", cov, cov.Coverage, config.Default, config.Default))
 			debugInfo = append(debugInfo, "  - Default coverage not satisfied")
 		} else {
 			debugInfo = append(debugInfo, "  - Default coverage satisfied")
 		}
 	}
 
-	return errors, debugInfo
+	debug := strings.Join(debugInfo, "\n")
+	if len(errors) > 0 {
+		return debug, fmt.Errorf("%s", strings.Join(errors, "\n"))
+	}
+	return debug, nil
 }
 
 const configFile = "golang-coverage-pre-commit.yaml"
@@ -273,7 +277,7 @@ const configFile = "golang-coverage-pre-commit.yaml"
 var exampleConfig = flag.Bool("example_config", false, "output an example config and exit")
 var debug = flag.Bool("debug", false, "output debugging information about matching coverage lines to rules")
 
-func realMain(args []string) (string, error) {
+func realMain(options Options, args []string) (string, error) {
 	if len(args) > 0 {
 		return "", fmt.Errorf("unexpected arguments: %v", args)
 	}
@@ -281,7 +285,6 @@ func realMain(args []string) (string, error) {
 		return makeExampleConfig(), nil
 	}
 
-	options := newOptions()
 	modBytes, err := os.ReadFile("go.mod")
 	if err != nil {
 		return "", fmt.Errorf("failed reading go.mod: %w", err)
@@ -306,23 +309,16 @@ func realMain(args []string) (string, error) {
 		return "", err
 	}
 
-	errors, debugInfo := checkCoverage(config, parsedCoverage)
-	if len(errors) > 0 {
-		for _, err = range errors {
-			fmt.Println(err)
-		}
+	debugInfo, err := checkCoverage(config, parsedCoverage)
+	if *debug {
+		return debugInfo, err
 	}
-	if *debug && len(debugInfo) > 0 {
-		for _, d := range debugInfo {
-			fmt.Println(d)
-		}
-	}
-	return "", nil
+	return "", err
 }
 
 func main() {
 	flag.Parse()
-	output, err := realMain(flag.Args())
+	output, err := realMain(newOptions(), flag.Args())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v: %v\n", os.Args[0], err)
 		os.Exit(1)
