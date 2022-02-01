@@ -287,10 +287,16 @@ func TestCheckCoverage(t *testing.T) {
 		input  string
 		desc   string
 		errors []string
+		debug  []string
 	}{
 		{
 			desc:   "Function matching",
 			errors: []string{"utils.go:1:\tReadFileOrDie\t57.0%: coverage 57.0% < 100.0%: matching function rule"},
+			debug: []string{
+				"Debug info for coverage matching",
+				"Line utils.go:1:\tReadFileOrDie\t57.0%\n",
+				"Function match: Regex: OrDie$ Coverage: 100",
+			},
 			input: `
 // Matches OrDie$, coverage too low.
 utils.go:1:	ReadFileOrDie	57.0%
@@ -303,6 +309,10 @@ utils.go:1:	ParseIntOrDie	100.0%
 			errors: []string{
 				"parse_json.go:1:\tFoo\t53.0%: coverage 53.0% < 73.0%: matching filename rule is",
 				"parse_yaml.go:1:\tBaz\t83.0%: coverage 83.0% < 100.0%: matching filename rule is",
+			},
+			debug: []string{
+				"Line parse_json.go:1:\tFoo\t53.0%\n",
+				"Filename match: Regex: ^parse_json.go$ Coverage: 73",
 			},
 			input: `
 // Matches ^parse_json.go$, coverage too low.
@@ -318,6 +328,7 @@ parse_yaml.go:1:	Qwerty	100.0%
 		{
 			desc:   "Default matching",
 			errors: []string{"utils.go:1:\tFoo\t57.0%: coverage 57.0% < 80.0%: default coverage requirement 80.0%"},
+			debug:  []string{"Line utils.go:1:\tFoo\t57.0%\n  - Default coverage not satisfied\n-"},
 			input: `
 // Matches nothing, coverage too low.
 utils.go:1:	Foo	57.0%
@@ -331,10 +342,12 @@ utils.go:1:	Bar	100.0%
 	for _, test := range tests {
 		coverage, err := parseCoverageOutput(options, splitAndStripComments(test.input))
 		assert.Nil(t, err)
-		// TODO: Check debugInfo contents.
-		_, err = checkCoverage(config, coverage)
+		debug, err := checkCoverage(config, coverage)
 		for i := range test.errors {
 			assert.Contains(t, err.Error(), test.errors[i], test.desc)
+		}
+		for i := range test.debug {
+			assert.Contains(t, debug, test.debug[i], test.desc)
 		}
 	}
 }
