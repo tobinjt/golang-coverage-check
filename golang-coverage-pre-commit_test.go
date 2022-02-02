@@ -328,10 +328,19 @@ parse_yaml.go:1:	Qwerty	100.0%
 		{
 			desc:   "Default matching",
 			errors: []string{"utils.go:1:\tFoo\t57.0%: coverage 57.0% < 80.0%: default coverage requirement 80.0%"},
-			debug:  []string{"Line utils.go:1:\tFoo\t57.0%\n  - Default coverage not satisfied\n-"},
+			debug:  []string{"Line utils.go:1:\tFoo\t57.0%\n  - Default coverage not satisfied"},
 			input: `
 // Matches nothing, coverage too low.
 utils.go:1:	Foo	57.0%
+// Matches nothing, coverage acceptable.
+utils.go:1:	Bar	100.0%
+`,
+		},
+		{
+			desc:   "No errors found",
+			errors: []string{},
+			debug:  []string{"Line utils.go:1:\tBar\t100.0%\n  - Default coverage satisfied"},
+			input: `
 // Matches nothing, coverage acceptable.
 utils.go:1:	Bar	100.0%
 `,
@@ -343,6 +352,9 @@ utils.go:1:	Bar	100.0%
 		coverage, err := parseCoverageOutput(options, splitAndStripComments(test.input))
 		assert.Nil(t, err)
 		debug, err := checkCoverage(config, coverage)
+		if len(test.errors) == 0 {
+			assert.Nil(t, err)
+		}
 		for i := range test.errors {
 			assert.Contains(t, err.Error(), test.errors[i], test.desc)
 		}
