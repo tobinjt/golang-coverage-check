@@ -17,10 +17,24 @@ import (
 // this program.  It exists so that tests can easily replace flags and
 // functions to trigger failure handling.
 type Options struct {
+	// Function pointers for dependency injection.
 	// Used by goCover to run binaries and capture their stdout.
 	captureOutput func(string, ...string) ([]string, error)
 	// Used to create a temporary flie.
 	createTemp func(string, string) (*os.File, error)
+	// Paths to read from.
+	// The config file to read.
+	configFile string
+	// The file to read module metadata from, "go.mod" except when testing error
+	// handling.
+	goMod string
+	// Flags.
+	// Set by --example_config; output an example config and exit.
+	outputExampleConfig bool
+	// Set by --debug_matching; output debugging information about matching
+	// coverage lines to rules.
+	debugMatching bool
+	// Other configuration/data that needs to be passed around.
 	// Module path extracted from go.mod.
 	modulePath string
 }
@@ -30,6 +44,8 @@ func newOptions() Options {
 	return Options{
 		captureOutput: captureOutput,
 		createTemp:    os.CreateTemp,
+		configFile:    "golang-coverage-pre-commit.yaml",
+		goMod:         "go.mod",
 	}
 }
 
@@ -272,32 +288,27 @@ Coverage:
 	return debug, nil
 }
 
-const configFile = "golang-coverage-pre-commit.yaml"
-
-var exampleConfig = flag.Bool("example_config", false, "output an example config and exit")
-var debug = flag.Bool("debug", false, "output debugging information about matching coverage lines to rules")
-
 func realMain(options Options, args []string) (string, error) {
 	if len(args) > 0 {
 		return "", fmt.Errorf("unexpected arguments: %v", args)
 	}
-	if *exampleConfig {
+	if options.outputExampleConfig {
 		return makeExampleConfig(), nil
 	}
 
-	modBytes, err := os.ReadFile("go.mod")
+	modBytes, err := os.ReadFile(options.goMod)
 	if err != nil {
-		return "", fmt.Errorf("failed reading go.mod: %w", err)
+		return "", fmt.Errorf("failed reading %v: %w", options.goMod, err)
 	}
 	options.modulePath = modfile.ModulePath(modBytes) + "/"
 
-	configBytes, err := os.ReadFile(configFile)
+	configBytes, err := os.ReadFile(options.configFile)
 	if err != nil {
-		return "", fmt.Errorf("failed reading config %v: %w", configFile, err)
+		return "", fmt.Errorf("failed reading config %v: %w", options.configFile, err)
 	}
 	config, err := parseYAMLConfig(configBytes)
 	if err != nil {
-		return "", fmt.Errorf("failed parsing config %v: %w", configFile, err)
+		return "", fmt.Errorf("failed parsing config %v: %w", options.configFile, err)
 	}
 
 	rawCoverage, err := goCover(options)
@@ -310,20 +321,24 @@ func realMain(options Options, args []string) (string, error) {
 	}
 
 	debugInfo, err := checkCoverage(config, parsedCoverage)
-	if *debug {
+	if options.debugMatching {
 		return debugInfo, err
 	}
 	return "", err
 }
 
 func main() {
+	options := newOptions()
+	flag.BoolVar(&options.outputExampleConfig, "example_config", false, "output an example config and exit")
+	flag.BoolVar(&options.debugMatching, "debug_matching", false, "output debugging information about matching coverage lines to rules")
 	flag.Parse()
-	output, err := realMain(newOptions(), flag.Args())
+
+	output, err := realMain(options, flag.Args())
+	if output != "" {
+		fmt.Print(output)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v: %v\n", os.Args[0], err)
 		os.Exit(1)
-	}
-	if output != "" {
-		fmt.Print(output)
 	}
 }
