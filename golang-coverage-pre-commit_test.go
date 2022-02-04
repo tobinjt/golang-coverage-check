@@ -159,8 +159,8 @@ func TestGoCoverCreateTempFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "error for testing")
 }
 
-func TestParseCoverageOutputSuccess(t *testing.T) {
-	input := `
+func validCoverageOutput() []string {
+	coverage := `
 github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:26:		String			100.0%
 github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:48:		String			31.0%
 github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:53:		makeExampleConfig	50.0%
@@ -169,9 +169,13 @@ github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:118:
 github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:140:	main			0.0%
 total:											(statements)		38.1%
 `
+	return strings.Split(coverage, "\n")
+}
+
+func TestParseCoverageOutputSuccess(t *testing.T) {
 	options := newOptions()
 	options.modulePath = "github.com/tobinjt/golang-coverage-pre-commit/"
-	results, err := parseCoverageOutput(options, strings.Split(input, "\n"))
+	results, err := parseCoverageOutput(options, validCoverageOutput())
 	assert.Nil(t, err)
 	assert.Equal(t, 6, len(results))
 
@@ -364,7 +368,7 @@ utils.go:1:	Bar	100.0%
 	}
 }
 
-func TestRealMainSimpleFailures(t *testing.T) {
+func TestRealMain(t *testing.T) {
 	table := []struct {
 		desc   string
 		err    string
@@ -434,6 +438,30 @@ func TestRealMainSimpleFailures(t *testing.T) {
 			mod: func(opts Options) Options {
 				opts.captureOutput = func(string, ...string) ([]string, error) {
 					return []string{"qwerty"}, nil
+				}
+				return opts
+			},
+		},
+		// Note that from here on the failures are that coverage isn't high enough.
+		{
+			desc:   "checkCoverage",
+			err:    "golang-coverage-pre-commit.go:48:\tString\t31.0%: coverage 31.0% < 100.0%: default coverage ",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.captureOutput = func(string, ...string) ([]string, error) {
+					return validCoverageOutput(), nil
+				}
+				return opts
+			},
+		},
+		{
+			desc:   "checkCoverage, with debugging output",
+			err:    "golang-coverage-pre-commit.go:48:\tString\t31.0%: coverage 31.0% < 100.0%: default coverage ",
+			output: "Debug info for coverage matching",
+			mod: func(opts Options) Options {
+				opts.debugMatching = true
+				opts.captureOutput = func(string, ...string) ([]string, error) {
+					return validCoverageOutput(), nil
 				}
 				return opts
 			},
