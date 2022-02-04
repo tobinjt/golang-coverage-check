@@ -363,3 +363,96 @@ utils.go:1:	Bar	100.0%
 		}
 	}
 }
+
+func TestRealMainSimpleFailures(t *testing.T) {
+	table := []struct {
+		desc   string
+		err    string
+		output string
+		mod    func(opts Options) Options
+	}{
+		{
+			desc:   "makeExampleConfig",
+			err:    "",
+			output: "Comment is not interpreted or used",
+			mod: func(opts Options) Options {
+				opts.outputExampleConfig = true
+				return opts
+			},
+		},
+		{
+			desc:   "bad go.mod path",
+			err:    "failed reading go-mod-does-not-exist:",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.goMod = "go-mod-does-not-exist"
+				return opts
+			},
+		},
+		{
+			desc:   "bad config path",
+			err:    "failed reading config does-not-exist.yaml:",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.configFile = "does-not-exist.yaml"
+				return opts
+			},
+		},
+		{
+			desc:   "bad config contents",
+			err:    "failed parsing config bad-config.yaml:",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.configFile = "bad-config.yaml"
+				return opts
+			},
+		},
+		{
+			desc:   "unexpected arguments",
+			err:    "unexpected arguments",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.args = []string{"asdf", "1234"}
+				return opts
+			},
+		},
+		{
+			desc:   "goCover fails",
+			err:    "forced error for goCover fails",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.createTemp = func(_, __ string) (*os.File, error) {
+					return nil, fmt.Errorf("forced error for goCover fails")
+				}
+				return opts
+			},
+		},
+		{
+			desc:   "parseCoverageOutput fails",
+			err:    "expected 3 parts, found 1, in \"qwerty\"",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.captureOutput = func(string, ...string) ([]string, error) {
+					return []string{"qwerty"}, nil
+				}
+				return opts
+			},
+		},
+	}
+
+	for _, test := range table {
+		options := test.mod(newOptions())
+		output, err := realMain(options)
+		if len(test.err) == 0 {
+			assert.Nil(t, err, test.desc)
+		} else {
+			assert.Error(t, err, test.desc)
+			assert.Contains(t, err.Error(), test.err, test.desc)
+		}
+		if len(test.output) > 0 {
+			assert.Contains(t, output, test.output, test.desc)
+		} else {
+			assert.Equal(t, "", output)
+		}
+	}
+}

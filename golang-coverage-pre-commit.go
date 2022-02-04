@@ -37,6 +37,8 @@ type Options struct {
 	// Other configuration/data that needs to be passed around.
 	// Module path extracted from go.mod.
 	modulePath string
+	// Command line arguments.
+	args []string
 }
 
 // newOptions returns an Options struct with fields set to standard values.
@@ -46,6 +48,7 @@ func newOptions() Options {
 		createTemp:    os.CreateTemp,
 		configFile:    "golang-coverage-pre-commit.yaml",
 		goMod:         "go.mod",
+		args:          flag.Args(),
 	}
 }
 
@@ -288,9 +291,9 @@ Coverage:
 	return debug, nil
 }
 
-func realMain(options Options, args []string) (string, error) {
-	if len(args) > 0 {
-		return "", fmt.Errorf("unexpected arguments: %v", args)
+func realMain(options Options) (string, error) {
+	if len(options.args) > 0 {
+		return "", fmt.Errorf("unexpected arguments: %v", options.args)
 	}
 	if options.outputExampleConfig {
 		return makeExampleConfig(), nil
@@ -333,10 +336,8 @@ func main() {
 	flag.BoolVar(&options.debugMatching, "debug_matching", false, "output debugging information about matching coverage lines to rules")
 	flag.Parse()
 
-	output, err := realMain(options, flag.Args())
-	if output != "" {
-		fmt.Print(output)
-	}
+	output, err := realMain(options)
+	fmt.Print(output)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v: %v\n", os.Args[0], err)
 		os.Exit(1)
