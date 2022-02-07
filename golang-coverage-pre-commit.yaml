@@ -1,9 +1,6 @@
 comment: Default to a high level of coverage, then add exceptions.
 default: 100
 functions:
-  - comment: Low coverage is acceptable for main()
+  - comment: main() is a single, untestable line
     regex: ^main$
     coverage: 0
-  - comment: TODO - improve coverage
-    regex: ^realMain$
-    coverage: 80

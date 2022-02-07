@@ -46,6 +46,11 @@ type Options struct {
 	parsedArgs []string
 	// Where to write flag parsing error messages to; nil default means os.Stderr.
 	flagOutput io.Writer
+	// Where to write output and error messages.
+	stdout io.Writer
+	stderr io.Writer
+	// Called when existing on error.
+	exit func(int)
 }
 
 // newOptions returns an Options struct with fields set to standard values.
@@ -63,6 +68,9 @@ func newOptions() Options {
 		goMod:         "go.mod",
 		programName:   os.Args[0],
 		rawArgs:       args,
+		stdout:        os.Stdout,
+		stderr:        os.Stderr,
+		exit:          os.Exit,
 	}
 }
 
@@ -353,12 +361,15 @@ func realMain(options Options) (string, error) {
 	return "", err
 }
 
-func main() {
-	options := newOptions()
-	output, err := realMain(options)
-	fmt.Print(output)
+func runAndPrint(options Options, runMe func(options Options) (string, error)) {
+	output, err := runMe(options)
+	fmt.Fprint(options.stdout, output)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v: %v\n", options.programName, err)
-		os.Exit(1)
+		fmt.Fprintf(options.stderr, "%v: %v\n", options.programName, err)
+		options.exit(1)
 	}
+}
+
+func main() {
+	runAndPrint(newOptions(), realMain)
 }

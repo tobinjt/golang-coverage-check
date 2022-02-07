@@ -436,7 +436,7 @@ func TestRealMain(t *testing.T) {
 			output: "",
 			mod: func(opts Options) Options {
 				opts.rawArgs = []string{"--bad-flag"}
-				opts.flagOutput = bytes.NewBufferString("")
+				opts.flagOutput = new(bytes.Buffer)
 				return opts
 			},
 		},
@@ -503,4 +503,40 @@ func TestRealMain(t *testing.T) {
 			assert.Equal(t, "", output)
 		}
 	}
+}
+
+func TestRunAndPrintSuccess(t *testing.T) {
+	options := newTestOptions()
+	stdout := new(bytes.Buffer)
+	options.stdout = stdout
+	stderr := new(bytes.Buffer)
+	options.stderr = stderr
+
+	runMe := func(options Options) (string, error) {
+		return "this is going to stdout", nil
+	}
+	runAndPrint(options, runMe)
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "this is going to stdout")
+}
+
+func TestRunAndPrintErrors(t *testing.T) {
+	options := newTestOptions()
+	stdout := new(bytes.Buffer)
+	options.stdout = stdout
+	stderr := new(bytes.Buffer)
+	options.stderr = stderr
+
+	exitCalled := false
+	options.exit = func(_ int) {
+		exitCalled = true
+	}
+
+	runMe := func(options Options) (string, error) {
+		return "this is going to stdout", fmt.Errorf("this is going to stderr")
+	}
+	runAndPrint(options, runMe)
+	assert.True(t, exitCalled)
+	assert.Contains(t, stderr.String(), "this is going to stderr")
+	assert.Contains(t, stdout.String(), "this is going to stdout")
 }
