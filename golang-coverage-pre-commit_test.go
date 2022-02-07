@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+func newTestOptions() Options {
+	options := newOptions()
+	options.rawArgs = []string{}
+	options.captureOutput = func(string, ...string) ([]string, error) {
+		panic("captureOutput was called without being set by the test")
+	}
+	return options
+}
 
 func TestMakeExampleConfig(t *testing.T) {
 	expected := strings.TrimLeft(`
@@ -128,7 +138,7 @@ func TestGoCoverSuccess(t *testing.T) {
 		"test": []string{"completely", "ignored"},
 		"tool": []string{"expected return value"},
 	}
-	options := newOptions()
+	options := newTestOptions()
 	options.captureOutput = func(command string, args ...string) ([]string, error) {
 		return fakeOutput[args[0]], nil
 	}
@@ -138,7 +148,7 @@ func TestGoCoverSuccess(t *testing.T) {
 }
 
 func TestGoCoverCaptureFailure(t *testing.T) {
-	options := newOptions()
+	options := newTestOptions()
 	options.captureOutput = func(string, ...string) ([]string, error) {
 		return []string{"this should not be seen"}, errors.New("error for testing")
 	}
@@ -149,7 +159,7 @@ func TestGoCoverCaptureFailure(t *testing.T) {
 }
 
 func TestGoCoverCreateTempFailure(t *testing.T) {
-	options := newOptions()
+	options := newTestOptions()
 	options.createTemp = func(string, string) (*os.File, error) {
 		return nil, errors.New("error for testing")
 	}
@@ -173,7 +183,7 @@ total:											(statements)		38.1%
 }
 
 func TestParseCoverageOutputSuccess(t *testing.T) {
-	options := newOptions()
+	options := newTestOptions()
 	options.modulePath = "github.com/tobinjt/golang-coverage-pre-commit/"
 	results, err := parseCoverageOutput(options, validCoverageOutput())
 	assert.Nil(t, err)
@@ -221,7 +231,7 @@ func TestParseCoverageOutputSuccess(t *testing.T) {
 }
 
 func TestParseCoverageOutputFailure(t *testing.T) {
-	options := newOptions()
+	options := newTestOptions()
 
 	badInputLine := `
 github.com/.../golang-coverage-pre-commit.go:26:		String			100.0%
@@ -351,7 +361,7 @@ utils.go:1:	Bar	100.0%
 		},
 	}
 
-	options := newOptions()
+	options := newTestOptions()
 	for _, test := range tests {
 		coverage, err := parseCoverageOutput(options, splitAndStripComments(test.input))
 		assert.Nil(t, err)
@@ -380,7 +390,7 @@ func TestRealMain(t *testing.T) {
 			err:    "",
 			output: "Comment is not interpreted or used",
 			mod: func(opts Options) Options {
-				opts.outputExampleConfig = true
+				opts.rawArgs = append(opts.rawArgs, "--example_config")
 				return opts
 			},
 		},
@@ -416,7 +426,17 @@ func TestRealMain(t *testing.T) {
 			err:    "unexpected arguments",
 			output: "",
 			mod: func(opts Options) Options {
-				opts.args = []string{"asdf", "1234"}
+				opts.rawArgs = []string{"asdf", "1234"}
+				return opts
+			},
+		},
+		{
+			desc:   "unsupported flag",
+			err:    "flag provided but not defined: -bad-flag",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.rawArgs = []string{"--bad-flag"}
+				opts.flagOutput = bytes.NewBufferString("")
 				return opts
 			},
 		},
@@ -459,7 +479,7 @@ func TestRealMain(t *testing.T) {
 			err:    "golang-coverage-pre-commit.go:48:\tString\t31.0%: coverage 31.0% < 100.0%: default coverage ",
 			output: "Debug info for coverage matching",
 			mod: func(opts Options) Options {
-				opts.debugMatching = true
+				opts.rawArgs = append(opts.rawArgs, "--debug_matching")
 				opts.captureOutput = func(string, ...string) ([]string, error) {
 					return validCoverageOutput(), nil
 				}
@@ -469,7 +489,7 @@ func TestRealMain(t *testing.T) {
 	}
 
 	for _, test := range table {
-		options := test.mod(newOptions())
+		options := test.mod(newTestOptions())
 		output, err := realMain(options)
 		if len(test.err) == 0 {
 			assert.Nil(t, err, test.desc)

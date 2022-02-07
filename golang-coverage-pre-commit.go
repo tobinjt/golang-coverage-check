@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"regexp"
@@ -37,18 +38,31 @@ type Options struct {
 	// Other configuration/data that needs to be passed around.
 	// Module path extracted from go.mod.
 	modulePath string
-	// Command line arguments.
-	args []string
+	// Program name from os.Args.
+	programName string
+	// Command line arguments before parsing, doesn't include the program name.
+	rawArgs []string
+	// Command line arguments after parsing.
+	parsedArgs []string
+	// Where to write flag parsing error messages to; nil default means os.Stderr.
+	flagOutput io.Writer
 }
 
 // newOptions returns an Options struct with fields set to standard values.
 func newOptions() Options {
+	args := []string{}
+	for i := range os.Args {
+		if i > 0 {
+			args = append(args, os.Args[i])
+		}
+	}
 	return Options{
 		captureOutput: captureOutput,
 		createTemp:    os.CreateTemp,
 		configFile:    "golang-coverage-pre-commit.yaml",
 		goMod:         "go.mod",
-		args:          flag.Args(),
+		programName:   os.Args[0],
+		rawArgs:       args,
 	}
 }
 
@@ -292,8 +306,17 @@ Coverage:
 }
 
 func realMain(options Options) (string, error) {
-	if len(options.args) > 0 {
-		return "", fmt.Errorf("unexpected arguments: %v", options.args)
+	flags := flag.NewFlagSet("", flag.ContinueOnError)
+	flags.SetOutput(options.flagOutput)
+	flags.BoolVar(&options.outputExampleConfig, "example_config", false, "output an example config and exit")
+	flags.BoolVar(&options.debugMatching, "debug_matching", false, "output debugging information about matching coverage lines to rules")
+	if err := flags.Parse(options.rawArgs); err != nil {
+		return "", err
+	}
+	options.parsedArgs = flags.Args()
+
+	if len(options.parsedArgs) > 0 {
+		return "", fmt.Errorf("unexpected arguments: %v", options.parsedArgs)
 	}
 	if options.outputExampleConfig {
 		return makeExampleConfig(), nil
@@ -332,14 +355,10 @@ func realMain(options Options) (string, error) {
 
 func main() {
 	options := newOptions()
-	flag.BoolVar(&options.outputExampleConfig, "example_config", false, "output an example config and exit")
-	flag.BoolVar(&options.debugMatching, "debug_matching", false, "output debugging information about matching coverage lines to rules")
-	flag.Parse()
-
 	output, err := realMain(options)
 	fmt.Print(output)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v: %v\n", os.Args[0], err)
+		fmt.Fprintf(os.Stderr, "%v: %v\n", options.programName, err)
 		os.Exit(1)
 	}
 }
