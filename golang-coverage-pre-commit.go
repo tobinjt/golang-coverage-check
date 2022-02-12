@@ -64,7 +64,7 @@ func newOptions() Options {
 	return Options{
 		captureOutput: captureOutput,
 		createTemp:    os.CreateTemp,
-		configFile:    "golang-coverage-pre-commit.yaml",
+		configFile:    ".golang-coverage-pre-commit.yaml",
 		goMod:         "go.mod",
 		programName:   os.Args[0],
 		rawArgs:       args,
@@ -108,7 +108,7 @@ func (rule Rule) String() string {
 	return fmt.Sprintf("Regex: %v Coverage: %v Comment: %v", rule.Regex, rule.Coverage, rule.Comment)
 }
 
-// Config represents an entire user config loaded from golang-coverage-pre-commit.yaml.
+// Config represents an entire user config loaded from .golang-coverage-pre-commit.yaml.
 type Config struct {
 	// Comment is not interpreted or used; it is provided as a structured way of
 	// adding comments to a config, so that automated editing is easier.

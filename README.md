@@ -9,12 +9,12 @@ go test --coverprofile="${filename}" --covermode=set
 go tool cover --func="${filename}"
 ```
 
-The output from the second command parsed to check whether it meets the coverage
-requirements you define (see Configuration below).
+The output from the second command will be parsed to check whether it meets the
+coverage requirements you define (see Configuration below).
 
 ## Configuration
 
-A YAML config file named `golang-coverage-pre-commit.yaml` is _required_; if
+A YAML config file named `.golang-coverage-pre-commit.yaml` is _required_; if
 this file doesn't exist an example config (see below) will be printed for you to
 save and modify.
 
