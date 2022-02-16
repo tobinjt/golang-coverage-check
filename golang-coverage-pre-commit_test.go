@@ -135,16 +135,50 @@ func TestCaptureOutput(t *testing.T) {
 
 func TestGoCoverSuccess(t *testing.T) {
 	fakeOutput := map[string][]string{
-		"test": []string{"completely", "ignored"},
-		"tool": []string{"expected return value"},
+		"test --covermode set --coverprofile": []string{"ignored"},
+		"tool cover --func":                   []string{"expected return value"},
 	}
+	commandRun := map[string]bool{}
 	options := newTestOptions()
 	options.captureOutput = func(command string, args ...string) ([]string, error) {
-		return fakeOutput[args[0]], nil
+		// The random filename is always the last arg, so drop it.
+		parts := args[0 : len(args)-1]
+		key := strings.Join(parts, " ")
+		commandRun[key] = true
+		return fakeOutput[key], nil
 	}
 	actual, err := goCover(options)
 	assert.Nil(t, err)
-	assert.Equal(t, fakeOutput["tool"], actual)
+	assert.Equal(t, []string{"expected return value"}, actual)
+	assert.Equal(t, len(commandRun), 2)
+	assert.True(t, commandRun["test --covermode set --coverprofile"], commandRun)
+	assert.True(t, commandRun["tool cover --func"], commandRun)
+}
+
+func TestGoCoverBrowser(t *testing.T) {
+	fakeOutput := map[string][]string{
+		"test --covermode set --coverprofile": []string{"ignored"},
+		"tool cover --func":                   []string{"expected return value"},
+		"tool cover --html":                   []string{"ignored"},
+	}
+	commandRun := map[string]bool{}
+	options := newTestOptions()
+	options.showCoverageInBrowser = true
+	options.captureOutput = func(command string, args ...string) ([]string, error) {
+		// The random filename is always the last arg, so drop it.
+		parts := args[0 : len(args)-1]
+		key := strings.Join(parts, " ")
+		commandRun[key] = true
+		return fakeOutput[key], nil
+	}
+
+	actual, err := goCover(options)
+	assert.Nil(t, err)
+	assert.Equal(t, []string{"expected return value"}, actual)
+	assert.Equal(t, 3, len(commandRun), commandRun)
+	assert.True(t, commandRun["test --covermode set --coverprofile"], commandRun)
+	assert.True(t, commandRun["tool cover --func"], commandRun)
+	assert.True(t, commandRun["tool cover --html"], commandRun)
 }
 
 func TestGoCoverCaptureFailure(t *testing.T) {

@@ -35,6 +35,8 @@ type Options struct {
 	// Set by --debug_matching; output debugging information about matching
 	// coverage lines to rules.
 	debugMatching bool
+	// Set by --browser; open coverage results in a browser.
+	showCoverageInBrowser bool
 	// Other configuration/data that needs to be passed around.
 	// Module path extracted from go.mod.
 	modulePath string
@@ -215,6 +217,13 @@ func goCover(options Options) ([]string, error) {
 		return []string{}, err
 	}
 
+	if options.showCoverageInBrowser {
+		_, err = options.captureOutput("go", "tool", "cover", "--html", file.Name())
+		if err != nil {
+			return []string{}, err
+		}
+	}
+
 	return options.captureOutput("go", "tool", "cover", "--func", file.Name())
 }
 
@@ -317,6 +326,7 @@ func realMain(options Options) (string, error) {
 	flags := flag.NewFlagSet("", flag.ContinueOnError)
 	flags.SetOutput(options.flagOutput)
 	flags.BoolVar(&options.outputExampleConfig, "example_config", false, "output an example config and exit")
+	flags.BoolVar(&options.showCoverageInBrowser, "browser", false, "open coverage results in a browser")
 	flags.BoolVar(&options.debugMatching, "debug_matching", false, "output debugging information about matching coverage lines to rules")
 	if err := flags.Parse(options.rawArgs); err != nil {
 		return "", err
