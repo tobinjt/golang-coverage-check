@@ -10,16 +10,15 @@ go tool cover --func="${filename}"
 ```
 
 The output from the second command will be parsed to check whether it meets the
-coverage requirements you define (see Configuration below).
+coverage requirements you define (see Configuration below), and an error message
+will be output for any functions not meeting your requirements.
 
 ## Configuration
 
-A YAML config file named `.golang-coverage-pre-commit.yaml` is _required_; if
-this file doesn't exist an example config (see below) will be printed for you to
-save and modify.
-
-None of the fields are required; an empty config is equivalent to a config
-containing only `default: 0`.
+A YAML config file named `.golang-coverage-pre-commit.yaml` is _required_. None
+of the fields are required; an empty config is equivalent to a config containing
+only `default: 0`. You can generate an example config (shown below) by running
+`golang-coverage-pre-commit --example_config`.
 
 ### Example config
 
@@ -48,7 +47,8 @@ filenames:
 
 ### Order of evaluation
 
-Each line of coverage output is independently evaluated:
+Each line of coverage output (effectively, each function in your code) is
+independently evaluated:
 
 - The function name is matched against each `function` regex, in the order
   they're listed in the config, with the first match winning.
@@ -58,7 +58,24 @@ Each line of coverage output is independently evaluated:
   winning. Note that filenames use regex matching, _not_ globs.
 - If neither the function name or the filename was matched, `default` is used.
 
+The coverage in the line is compared to the coverage required by the matching
+rule, and if the coverage is lower than the requirement an error will be output.
+
 ## FAQ
+
+**How can I tell which lines of code have not been tested?**
+
+Run `golang-coverage-pre-commit --browser` - it will open the coverage report in
+your browser. If you're developing remotely this will not work, but you can
+find the coverage report in `${TMPDIR}/cover<RANDOM>/coverage.html` so maybe you
+can copy it to your local machine and open it from there?
+
+**How can I debug rule matching?**
+
+Run `golang-coverage-pre-commit --debug_matching` - each coverage line and the
+rule that matches it will be printed. That tells you that the earlier rules in
+your config did not match that line and the later rules in your config were not
+reached.
 
 **How can I pass different arguments to `go test`?**
 
