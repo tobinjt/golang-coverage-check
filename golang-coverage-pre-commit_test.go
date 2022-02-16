@@ -155,6 +155,32 @@ func TestGoCoverSuccess(t *testing.T) {
 	assert.True(t, commandRun["tool cover --func"], commandRun)
 }
 
+func TestGoCoverBrowserFailure(t *testing.T) {
+	fakeOutput := map[string][]string{
+		"test --covermode set --coverprofile": []string{"ignored"},
+	}
+	fakeErrors := map[string]error{
+		"tool cover --html": fmt.Errorf("browser error"),
+	}
+	commandRun := map[string]bool{}
+	options := newTestOptions()
+	options.showCoverageInBrowser = true
+	options.captureOutput = func(command string, args ...string) ([]string, error) {
+		// The random filename is always the last arg, so drop it.
+		parts := args[0 : len(args)-1]
+		key := strings.Join(parts, " ")
+		commandRun[key] = true
+		return fakeOutput[key], fakeErrors[key]
+	}
+
+	actual, err := goCover(options)
+	assert.Error(t, err)
+	assert.Equal(t, []string{}, actual)
+	assert.Equal(t, 2, len(commandRun), commandRun)
+	assert.True(t, commandRun["test --covermode set --coverprofile"], commandRun)
+	assert.True(t, commandRun["tool cover --html"], commandRun)
+}
+
 func TestGoCoverBrowser(t *testing.T) {
 	fakeOutput := map[string][]string{
 		"test --covermode set --coverprofile": []string{"ignored"},
