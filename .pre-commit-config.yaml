@@ -23,3 +23,10 @@ repos:
   # TODO(johntobin): this restricts the tests run, do I need to override args?
   - id: go-unit-tests
   - id: go-vet
+- repo: local
+  hooks:
+  - id: markdownlint
+    name: Run `markdownlint`
+    language: system
+    types: [markdown]
+    entry: markdownlint
