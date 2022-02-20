@@ -24,7 +24,7 @@ func TestMakeExampleConfig(t *testing.T) {
 	expected := strings.TrimLeft(`
 comment: Comment is not interpreted or used; it is provided as a structured way of
     adding comments to a config, so that automated editing is easier.
-default: 80
+default_coverage: 80
 functions:
   - comment: Low coverage is acceptable for main()
     regex: ^main$
@@ -55,12 +55,12 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 		},
 		{
 			err:   "default coverage (101.0) is outside the range 0-100",
-			input: "default: 101",
+			input: "default_coverage: 101",
 		},
 		{
 			err: "coverage (1234.0) is outside the range 0-100 in",
 			input: `
-				default: 99
+				default_coverage: 99
 				functions:
 				  - regex: asdf
 				    coverage: 1234`,
@@ -68,7 +68,7 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 		{
 			err: "coverage (-1.0) is outside the range 0-100 in",
 			input: `
-				default: 99
+				default_coverage: 99
 				filenames:
 				  - regex: asdf
 				    coverage: -1`,
@@ -91,10 +91,10 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 func TestParseYAMLConfigSuccess(t *testing.T) {
 	config, err := parseYAMLConfig([]byte(""))
 	assert.Nil(t, err)
-	assert.Equal(t, 0.0, config.Default)
+	assert.Equal(t, 0.0, config.DefaultCoverage)
 
 	yml := `
-default: 75
+default_coverage: 75
 functions:
 	- regex: pinky
 		coverage: 20
@@ -111,7 +111,7 @@ filenames:
 	yml = strings.ReplaceAll(yml, "\t", "  ")
 	config, err = parseYAMLConfig([]byte(yml))
 	assert.Nil(t, err)
-	assert.Equal(t, 75.0, config.Default)
+	assert.Equal(t, 75.0, config.DefaultCoverage)
 	assert.Equal(t, 2, len(config.Functions))
 	assert.Equal(t, "pinky", config.Functions[0].Regex)
 }

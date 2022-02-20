@@ -20,8 +20,8 @@ requirements.
 
 A YAML config file named `.golang-coverage-pre-commit.yaml` is **_required_**.
 None of the fields are required inside the file; an empty config is equivalent
-to a config containing only `default: 0`. You can generate an example config
-(shown below) by running `golang-coverage-pre-commit --example_config`.
+to a config containing only `default_coverage: 0`. You can generate an example
+config (shown below) by running `golang-coverage-pre-commit --example_config`.
 
 ### Example config
 
@@ -29,7 +29,7 @@ to a config containing only `default: 0`. You can generate an example config
 comment:
   Comment is not interpreted or used; it is provided as a structured way of
   adding comments to a config, so that automated editing is easier.
-default: 80
+default_coverage: 80
 functions:
   - comment: Low coverage is acceptable for main()
     regex: ^main$
@@ -55,8 +55,8 @@ filenames:
 - `comment`: unused by `golang-coverage-pre-commit`, it exists to support
   structured comments that survive de-serialisation and re-serialisation, e.g.
   when combining config snippets.
-- `default`: this is the default required coverage level that is used when a
-  coverage line is not matched by a more specific rule (see [Order of
+- `default_coverage`: this is the default required coverage level that is used
+  when a coverage line is not matched by a more specific rule (see [Order of
   evaluation](#order-of-evaluation) below).
 - `functions`: a list of rules matching against function names.
 - `filenames`: a list of rules matching against filenames.
@@ -83,7 +83,8 @@ independently evaluated:
   the module name from `go.mod` removed) is matched against each `filename`
   regex, in the order they're listed in the config, with the first match
   winning. Note that filenames use regex matching, _not_ globs.
-- If neither the function name or the filename was matched, `default` is used.
+- If neither the function name or the filename was matched, `default_coverage`
+  is used.
 
 The coverage in the line is compared to the coverage required by the matching
 rule, and if the coverage is lower than the requirement an error will be output.
@@ -96,13 +97,13 @@ the current coverage level for existing code to prevent a reduction in coverage.
 ```shell
 default_coverage=100  # Change if you'd prefer to set the bar lower.
 tmpfile="$(mktemp -t .golang-coverage-pre-commit.yaml.XXXXXXXX)"
-echo "default: ${default_coverage}" > .golang-coverage-pre-commit.yaml
+echo "default_coverage: ${default_coverage}" > .golang-coverage-pre-commit.yaml
 
 cat > "${tmpfile}" <<END_OF_HEADER
 comment:
     Bootstrapped config to maintain current coverage and require high coverage
     for new functions.
-default: ${default_coverage}
+default_coverage: ${default_coverage}
 END_OF_HEADER
 
 (golang-coverage-pre-commit 2>&1) \

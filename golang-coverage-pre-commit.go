@@ -115,10 +115,10 @@ type Config struct {
 	// Comment is not interpreted or used; it is provided as a structured way of
 	// adding comments to a config, so that automated editing is easier.
 	Comment string
-	// Default is the default coverage required if none of the function or
+	// DefaultCoverage is the default coverage required if none of the function or
 	// filename rules match; this is a floating point percentage, so it should be
 	// >= 0 and <= 100.
-	Default float64
+	DefaultCoverage float64 `yaml:"default_coverage"`
 	// Functions is a list of rules matching against *function names*; they will
 	// be checked in-order, and the first match wins.
 	Functions []Rule
@@ -138,7 +138,7 @@ func makeExampleConfig() string {
 		Comment: "Comment is not interpreted or used; it is provided as a " +
 			"structured way of adding comments to a config, so that automated " +
 			"editing is easier.",
-		Default: 80.0,
+		DefaultCoverage: 80.0,
 		Functions: []Rule{
 			{
 				Comment:  "Low coverage is acceptable for main()",
@@ -175,8 +175,8 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 	if err := yaml.Unmarshal(yamlConf, &config); err != nil {
 		return config, fmt.Errorf("failed parsing YAML: %w", err)
 	}
-	if config.Default < 0 || config.Default > 100 {
-		return config, fmt.Errorf("default coverage (%.1f) is outside the range 0-100", config.Default)
+	if config.DefaultCoverage < 0 || config.DefaultCoverage > 100 {
+		return config, fmt.Errorf("default coverage (%.1f) is outside the range 0-100", config.DefaultCoverage)
 	}
 	for i := range config.Functions {
 		config.Functions[i].compiledRegex = regexp.MustCompile(config.Functions[i].Regex)
@@ -307,8 +307,8 @@ Coverage:
 			}
 		}
 
-		if cov.Coverage < config.Default {
-			errors = append(errors, fmt.Sprintf("%v: coverage %.1f%% < %.1f%%: default coverage requirement %.1f%%", cov, cov.Coverage, config.Default, config.Default))
+		if cov.Coverage < config.DefaultCoverage {
+			errors = append(errors, fmt.Sprintf("%v: coverage %.1f%% < %.1f%%: default coverage requirement %.1f%%", cov, cov.Coverage, config.DefaultCoverage, config.DefaultCoverage))
 			debugInfo = append(debugInfo, "  - Default coverage not satisfied")
 		} else {
 			debugInfo = append(debugInfo, "  - Default coverage satisfied")
