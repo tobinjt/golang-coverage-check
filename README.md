@@ -148,7 +148,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for details.
 
 ## Code of Conduct
 
-See [`CODE-OF-CONDUCT.md`](CODE-OF-CONDUCT.md) for details.
+See [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for details.
 
 ## License
 
