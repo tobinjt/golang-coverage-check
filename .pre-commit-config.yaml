@@ -43,4 +43,5 @@ repos:
     name: Run `markdownlint`
     language: system
     types: [markdown]
+    exclude: CODE_OF_CONDUCT.md
     entry: markdownlint
