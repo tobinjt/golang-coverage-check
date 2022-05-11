@@ -33,7 +33,6 @@ repos:
   - id: go-build
   - id: go-fmt
   - id: go-imports
-  - id: go-lint
   # TODO(johntobin): this restricts the tests run, do I need to override args?
   - id: go-unit-tests
   - id: go-vet
