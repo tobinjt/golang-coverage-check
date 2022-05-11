@@ -36,24 +36,22 @@ func newTestOptions() Options {
 
 func TestMakeExampleConfig(t *testing.T) {
 	expected := strings.TrimLeft(`
-comment: Comment is not interpreted or used; it is provided as a structured way of
-    adding comments to a config, so that automated editing is easier.
+comment: Comment is not interpreted or used; it is provided as a structured way of adding comments to a config, so that automated editing is easier.
 default_coverage: 80
 functions:
-  - comment: Low coverage is acceptable for main()
-    regex: ^main$
-    coverage: 50
-  - comment: All the fooOrDie() functions should be fully tested because they panic()
-        on failure
-    regex: OrDie$
-    coverage: 100
+    - comment: Low coverage is acceptable for main()
+      regex: ^main$
+      coverage: 50
+    - comment: All the fooOrDie() functions should be fully tested because they panic() on failure
+      regex: OrDie$
+      coverage: 100
 filenames:
-  - comment: 'TODO: improve test coverage for parse_json.go'
-    regex: ^parse_json.go$
-    coverage: 73
-  - comment: Full coverage for other parsers
-    regex: ^parse.*.go$
-    coverage: 100
+    - comment: 'TODO: improve test coverage for parse_json.go'
+      regex: ^parse_json.go$
+      coverage: 73
+    - comment: Full coverage for other parsers
+      regex: ^parse.*.go$
+      coverage: 100
 `, "\n")
 	assert.Equal(t, expected, makeExampleConfig())
 }
