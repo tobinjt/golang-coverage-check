@@ -149,8 +149,8 @@ func TestCaptureOutput(t *testing.T) {
 
 func TestGoCoverSuccess(t *testing.T) {
 	fakeOutput := map[string][]string{
-		"test --covermode set --coverprofile": []string{"ignored"},
-		"tool cover --func":                   []string{"expected return value"},
+		"test --covermode set --coverprofile": {"ignored"},
+		"tool cover --func":                   {"expected return value"},
 	}
 	commandRun := map[string]bool{}
 	options := newTestOptions()
@@ -171,7 +171,7 @@ func TestGoCoverSuccess(t *testing.T) {
 
 func TestGoCoverBrowserFailure(t *testing.T) {
 	fakeOutput := map[string][]string{
-		"test --covermode set --coverprofile": []string{"ignored"},
+		"test --covermode set --coverprofile": {"ignored"},
 	}
 	fakeErrors := map[string]error{
 		"tool cover --html": fmt.Errorf("browser error"),
@@ -197,9 +197,9 @@ func TestGoCoverBrowserFailure(t *testing.T) {
 
 func TestGoCoverBrowser(t *testing.T) {
 	fakeOutput := map[string][]string{
-		"test --covermode set --coverprofile": []string{"ignored"},
-		"tool cover --func":                   []string{"expected return value"},
-		"tool cover --html":                   []string{"ignored"},
+		"test --covermode set --coverprofile": {"ignored"},
+		"tool cover --func":                   {"expected return value"},
+		"tool cover --html":                   {"ignored"},
 	}
 	commandRun := map[string]bool{}
 	options := newTestOptions()
@@ -356,6 +356,53 @@ total:											(statements)		38.1%
 	}
 }
 
+func TestGenerateConfig(t *testing.T) {
+	coverage := []CoverageLine{
+		{
+			Filename:   "test.go",
+			LineNumber: "1",
+			Function:   "func1",
+			Coverage:   20.0,
+		},
+		{
+			Filename:   "test.go",
+			LineNumber: "2",
+			Function:   "func5",
+			Coverage:   34.0,
+		},
+		{
+			Filename:   "test.go",
+			LineNumber: "9",
+			Function:   "func17",
+			Coverage:   12.3,
+		},
+	}
+
+	expected := Config{
+		DefaultCoverage: 100.0,
+		Functions: []Rule{
+			{
+				Regex:    "^func1$",
+				Comment:  "Generated rule for func1, found at test.go:1",
+				Coverage: 20.0,
+			},
+			{
+				Regex:    "^func5$",
+				Comment:  "Generated rule for func5, found at test.go:2",
+				Coverage: 34.0,
+			},
+			{
+				Regex:    "^func17$",
+				Comment:  "Generated rule for func17, found at test.go:9",
+				Coverage: 12.3,
+			},
+		},
+	}
+
+	generated := generateConfig(coverage)
+	assert.Equal(t, expected, generated)
+}
+
 func splitAndStripComments(input string) []string {
 	output := []string{}
 	for _, line := range strings.Split(input, "\n") {
@@ -469,6 +516,18 @@ func TestRealMain(t *testing.T) {
 			},
 		},
 		{
+			desc:   "generateConfig",
+			err:    "",
+			output: "Generated rule for parseYAMLConfig",
+			mod: func(opts Options) Options {
+				opts.rawArgs = []string{"--generate_config"}
+				opts.captureOutput = func(string, ...string) ([]string, error) {
+					return validCoverageOutput(), nil
+				}
+				return opts
+			},
+		},
+		{
 			desc:   "bad go.mod path",
 			err:    "failed reading go-mod-does-not-exist:",
 			output: "",
@@ -566,15 +625,15 @@ func TestRealMain(t *testing.T) {
 		options := test.mod(newTestOptions())
 		output, err := realMain(options)
 		if len(test.err) == 0 {
-			assert.Nil(t, err, test.desc)
+			assert.Nil(t, err, "error check for "+test.desc)
 		} else {
-			assert.Error(t, err, test.desc)
-			assert.Contains(t, err.Error(), test.err, test.desc)
+			assert.Error(t, err, "error check for "+test.desc)
+			assert.Contains(t, err.Error(), test.err, "error check for "+test.desc)
 		}
 		if len(test.output) > 0 {
-			assert.Contains(t, output, test.output, test.desc)
+			assert.Contains(t, output, test.output, "output check for "+test.desc)
 		} else {
-			assert.Equal(t, "", output)
+			assert.Equal(t, "", output, "output check for "+test.desc)
 		}
 	}
 }

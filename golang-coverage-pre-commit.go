@@ -46,6 +46,8 @@ type Options struct {
 	// Flags.
 	// Set by --example_config; output an example config and exit.
 	outputExampleConfig bool
+	// Set by --generate_config; generate a config that exactly matches current coverage.
+	generateConfig bool
 	// Set by --debug_matching; output debugging information about matching
 	// coverage lines to rules.
 	debugMatching bool
@@ -336,10 +338,27 @@ Coverage:
 	return debug, nil
 }
 
+// Generate a Config from coverage information; used by --generate_config.
+func generateConfig(coverage []CoverageLine) Config {
+	config := Config{
+		DefaultCoverage: 100,
+	}
+	for _, cov := range coverage {
+		config.Functions = append(config.Functions,
+			Rule{
+				Comment:  "Generated rule for " + cov.Function + ", found at " + cov.Filename + ":" + cov.LineNumber,
+				Coverage: cov.Coverage,
+				Regex:    "^" + cov.Function + "$",
+			})
+	}
+	return config
+}
+
 func realMain(options Options) (string, error) {
 	flags := flag.NewFlagSet("", flag.ContinueOnError)
 	flags.SetOutput(options.flagOutput)
 	flags.BoolVar(&options.outputExampleConfig, "example_config", false, "output an example config and exit")
+	flags.BoolVar(&options.generateConfig, "generate_config", false, "output a config that exactly matches current coverage and exit")
 	flags.BoolVar(&options.showCoverageInBrowser, "browser", false, "open coverage results in a browser")
 	flags.BoolVar(&options.debugMatching, "debug_matching", false, "output debugging information about matching coverage lines to rules")
 	if err := flags.Parse(options.rawArgs); err != nil {
@@ -360,6 +379,10 @@ func realMain(options Options) (string, error) {
 	}
 	options.modulePath = modfile.ModulePath(modBytes) + "/"
 
+	if options.generateConfig {
+		// Don't require an existing config when generating one.
+		options.configFile = os.DevNull
+	}
 	configBytes, err := os.ReadFile(options.configFile)
 	if err != nil {
 		return "", fmt.Errorf("failed reading config %v: %w", options.configFile, err)
@@ -376,6 +399,11 @@ func realMain(options Options) (string, error) {
 	parsedCoverage, err := parseCoverageOutput(options, rawCoverage)
 	if err != nil {
 		return "", err
+	}
+
+	if options.generateConfig {
+		newConfig := generateConfig(parsedCoverage)
+		return newConfig.String(), nil
 	}
 
 	debugInfo, err := checkCoverage(config, parsedCoverage)

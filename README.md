@@ -95,24 +95,7 @@ You can easily bootstrap a config that requires high coverage for new code and
 the current coverage level for existing code to prevent a reduction in coverage.
 
 ```shell
-default_coverage=100  # Change if you'd prefer to set the bar lower.
-tmpfile="$(mktemp -t .golang-coverage-pre-commit.yaml.XXXXXXXX)"
-echo "default_coverage: ${default_coverage}" > .golang-coverage-pre-commit.yaml
-
-cat > "${tmpfile}" <<END_OF_HEADER
-comment:
-    Bootstrapped config to maintain current coverage and require high coverage
-    for new functions.
-default_coverage: ${default_coverage}
-END_OF_HEADER
-
-(golang-coverage-pre-commit 2>&1) \
-  | awk -F '\t' '{
-        print "  - regex: ^" $2 "$";
-        sub("%.*", "", $3);
-        print "    coverage: " $3}' \
-  >> "${tmpfile}"
-mv "${tmpfile}" .golang-coverage-pre-commit.yaml
+golang-coverage-pre-commit --generate_config > .golang-coverage-pre-commit.yaml
 ```
 
 ## FAQ
