@@ -30,21 +30,32 @@ comment:
   Comment is not interpreted or used; it is provided as a structured way of
   adding comments to a config, so that automated editing is easier.
 default_coverage: 80
-functions:
+rules:
   - comment: Low coverage is acceptable for main()
-    regex: ^main$
+    filename_regex: ""
+    function_regex: ^main$
     coverage: 50
   - comment:
       All the fooOrDie() functions should be fully tested because they panic()
       on failure
-    regex: ^.*OrDie$
+    filename_regex: ""
+    function_regex: OrDie$
     coverage: 100
-filenames:
   - comment: "TODO: improve test coverage for parse_json.go"
-    regex: ^parse_json.go$
+    filename_regex: ^parse_json.go$
+    function_regex: ""
     coverage: 73
   - comment: Full coverage for other parsers
-    regex: ^parse.*.go$
+    filename_regex: ^parse.*.go$
+    function_regex: ""
+    coverage: 100
+  - comment: String() in urls.go has low coverage
+    filename_regex: ^String$
+    function_regex: ^urls.go$
+    coverage: 56
+  - comment: String() everywhere else should have high coverage
+    filename_regex: ^String$
+    function_regex: ""
     coverage: 100
 ```
 
@@ -58,18 +69,19 @@ filenames:
 - `default_coverage`: this is the default required coverage level that is used
   when a coverage line is not matched by a more specific rule (see [Order of
   evaluation](#order-of-evaluation) below).
-- `functions`: a list of rules matching against function names.
-- `filenames`: a list of rules matching against filenames.
+- `rules`: a list of rules (described below).
 
-**_functions and filenames fields_**
+**_Rules_**
 
 The `functions` and `filenames` rules have exactly the same fields.
 
 - `comment`: unused by `golang-coverage-pre-commit`, it exists to support
   structured comments that survive de-serialisation and re-serialisation, e.g.
   when combining config snippets.
-- `regex`: the regular expression that the function name or filename is matched
-  against.
+- `filename_regex`: the regular expression that the filename is matched against.
+  Ignored if empty.
+- `function_regex`: the regular expression that the function name is matched
+  against. Ignored if empty.
 - `coverage`: the required coverage level for lines matched by this rule.
 
 ### Order of evaluation
@@ -77,17 +89,19 @@ The `functions` and `filenames` rules have exactly the same fields.
 Each line of coverage output (effectively, each function in your code) is
 independently evaluated:
 
-- The function name is matched against each `function` regex, in the order
-  they're listed in the config, with the first match winning.
-- If the function name wasn't matched, the filename (with the line number and
-  the module name from `go.mod` removed) is matched against each `filename`
-  regex, in the order they're listed in the config, with the first match
-  winning. Note that filenames use regex matching, _not_ globs.
-- If neither the function name or the filename was matched, `default_coverage`
-  is used.
+- Each rule is checked in the order provided in the config:
 
-The coverage in the line is compared to the coverage required by the matching
-rule, and if the coverage is lower than the requirement an error will be output.
+  - If a `filename_regex` was provided the filename must match it; an empty or
+    missing `filename_regex` is ignored. The line number and the module name
+    from `go.mod` are removed before matching. Note that `filename_regex` is a
+    _regex_, not a _glob_.
+  - If a `function_regex` was provided the function name must match it; an empty
+    or missing `function_regex` is ignored.
+  - If both checks pass the required coverage is compared against the actual
+    coverage, and an error printed if the actual coverage is not high enough.
+
+- If no rules matched, `default_coverage` is compared against the actual
+  coverage, and an error printed if the actual coverage is not high enough.
 
 ### Bootstrapping a config
 

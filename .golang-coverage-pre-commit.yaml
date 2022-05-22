@@ -14,7 +14,7 @@
 
 comment: Default to a high level of coverage, then add exceptions.
 default_coverage: 100
-functions:
+rules:
   - comment: main() is a single, untestable line
-    regex: ^main$
+    function_regex: ^main$
     coverage: 0

@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"golang.org/x/mod/modfile"
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 )
 
 // Options contains all the flags and dependency-injected functions used in
@@ -108,22 +108,27 @@ func (coverage CoverageLine) String() string {
 	return fmt.Sprintf("%s:%s:\t%s\t%.1f%%", coverage.Filename, coverage.LineNumber, coverage.Function, coverage.Coverage)
 }
 
-// Rule represents a single function or filename rule.
+// Rule represents a coverage rule.
 type Rule struct {
 	// Comment is not interpreted or used; it is provided as a structured way of
 	// adding comments to an entry, so that automated editing is easier.
 	Comment string
-	// Regex used when matching against a function or filename.
-	Regex string
+	// Regex used when matching against a filename.
+	FilenameRegex string `yaml:"filename_regex"`
+	// Regex used when matching against a function.
+	FunctionRegex string `yaml:"function_regex"`
 	// Coverage level required for this function or filename; this is a floating
 	// point percentage, so it should be >= 0 and <= 100.
 	Coverage float64
-	// compiledRegex is the result of regexp.MustCompile(Regex).
-	compiledRegex *regexp.Regexp
+	// compiledFilenameRegex is the result of regexp.MustCompile(FilenameRegex).
+	compiledFilenameRegex *regexp.Regexp
+	// compiledFunctionRegex is the result of regexp.MustCompile(FunctionRegex).
+	compiledFunctionRegex *regexp.Regexp
 }
 
 func (rule Rule) String() string {
-	return fmt.Sprintf("Regex: %v Coverage: %v Comment: %v", rule.Regex, rule.Coverage, rule.Comment)
+	return fmt.Sprintf("FilenameRegex: %v FunctionRegex: %v Coverage: %v Comment: %v",
+		rule.FilenameRegex, rule.FunctionRegex, rule.Coverage, rule.Comment)
 }
 
 // Config represents an entire user config loaded from .golang-coverage-pre-commit.yaml.
@@ -135,12 +140,8 @@ type Config struct {
 	// filename rules match; this is a floating point percentage, so it should be
 	// >= 0 and <= 100.
 	DefaultCoverage float64 `yaml:"default_coverage"`
-	// Functions is a list of rules matching against *function names*; they will
-	// be checked in-order, and the first match wins.
-	Functions []Rule
-	// Functions is a list of rules matching against *filenames*; they will be
-	// checked in-order, and the first match wins.
-	Filenames []Rule
+	// Rules is a list of rules that will be checked in-order, and the first match wins.
+	Rules []Rule
 }
 
 func (config Config) String() string {
@@ -155,29 +156,38 @@ func makeExampleConfig() string {
 			"structured way of adding comments to a config, so that automated " +
 			"editing is easier.",
 		DefaultCoverage: 80.0,
-		Functions: []Rule{
+		Rules: []Rule{
 			{
-				Comment:  "Low coverage is acceptable for main()",
-				Regex:    "^main$",
-				Coverage: 50,
+				Comment:       "Low coverage is acceptable for main()",
+				FunctionRegex: "^main$",
+				Coverage:      50,
 			},
 			{
 				Comment: "All the fooOrDie() functions should be fully tested because" +
 					" they panic() on failure",
-				Regex:    "OrDie$",
-				Coverage: 100,
-			},
-		},
-		Filenames: []Rule{
-			{
-				Comment:  "TO" + "DO: improve test coverage for parse_json.go",
-				Regex:    "^parse_json.go$",
-				Coverage: 73,
+				FunctionRegex: "OrDie$",
+				Coverage:      100,
 			},
 			{
-				Comment:  "Full coverage for other parsers",
-				Regex:    "^parse.*.go$",
-				Coverage: 100,
+				Comment:       "TO" + "DO: improve test coverage for parse_json.go",
+				FilenameRegex: "^parse_json.go$",
+				Coverage:      73,
+			},
+			{
+				Comment:       "Full coverage for other parsers",
+				FilenameRegex: "^parse.*.go$",
+				Coverage:      100,
+			},
+			{
+				Comment:       "String() in urls.go has low coverage",
+				FunctionRegex: "^urls.go$",
+				FilenameRegex: "^String$",
+				Coverage:      56,
+			},
+			{
+				Comment:       "String() everywhere else should have high coverage",
+				FilenameRegex: "^String$",
+				Coverage:      100,
 			},
 		},
 	}
@@ -188,22 +198,17 @@ func makeExampleConfig() string {
 // compiles every regex for speed.
 func parseYAMLConfig(yamlConf []byte) (Config, error) {
 	var config Config
-	if err := yaml.Unmarshal(yamlConf, &config); err != nil {
+	if err := yaml.UnmarshalStrict(yamlConf, &config); err != nil {
 		return config, fmt.Errorf("failed parsing YAML: %w", err)
 	}
 	if config.DefaultCoverage < 0 || config.DefaultCoverage > 100 {
 		return config, fmt.Errorf("default coverage (%.1f) is outside the range 0-100", config.DefaultCoverage)
 	}
-	for i := range config.Functions {
-		config.Functions[i].compiledRegex = regexp.MustCompile(config.Functions[i].Regex)
-		if config.Functions[i].Coverage < 0 || config.Functions[i].Coverage > 100 {
-			return config, fmt.Errorf("coverage (%.1f) is outside the range 0-100 in %v", config.Functions[i].Coverage, config.Functions[i])
-		}
-	}
-	for i := range config.Filenames {
-		config.Filenames[i].compiledRegex = regexp.MustCompile(config.Filenames[i].Regex)
-		if config.Filenames[i].Coverage < 0 || config.Filenames[i].Coverage > 100 {
-			return config, fmt.Errorf("coverage (%.1f) is outside the range 0-100 in %v", config.Filenames[i].Coverage, config.Filenames[i])
+	for i := range config.Rules {
+		config.Rules[i].compiledFilenameRegex = regexp.MustCompile(config.Rules[i].FilenameRegex)
+		config.Rules[i].compiledFunctionRegex = regexp.MustCompile(config.Rules[i].FunctionRegex)
+		if config.Rules[i].Coverage < 0 || config.Rules[i].Coverage > 100 {
+			return config, fmt.Errorf("coverage (%.1f) is outside the range 0-100 in %v", config.Rules[i].Coverage, config.Rules[i])
 		}
 	}
 	return config, nil
@@ -303,24 +308,21 @@ func checkCoverage(config Config, coverage []CoverageLine) (string, error) {
 Coverage:
 	for _, cov := range coverage {
 		debugInfo = append(debugInfo, fmt.Sprintf("- Line %v", cov))
-		for _, function := range config.Functions {
-			if function.compiledRegex.MatchString(cov.Function) {
-				debugInfo = append(debugInfo, fmt.Sprintf("  - Function match: %v", function))
-				if cov.Coverage < function.Coverage {
-					errors = append(errors, fmt.Sprintf("%v: coverage %.1f%% < %.1f%%: matching function rule is `%v`", cov, cov.Coverage, function.Coverage, function))
-				}
-				continue Coverage
+		for _, rule := range config.Rules {
+			if rule.FilenameRegex != "" && !rule.compiledFilenameRegex.MatchString(cov.Filename) {
+				continue
 			}
-		}
-
-		for _, filename := range config.Filenames {
-			if filename.compiledRegex.MatchString(cov.Filename) {
-				debugInfo = append(debugInfo, fmt.Sprintf("  - Filename match: %v", filename))
-				if cov.Coverage < filename.Coverage {
-					errors = append(errors, fmt.Sprintf("%v: coverage %.1f%% < %.1f%%: matching filename rule is `%v`", cov, cov.Coverage, filename.Coverage, filename))
-				}
-				continue Coverage
+			if rule.FunctionRegex != "" && !rule.compiledFunctionRegex.MatchString(cov.Function) {
+				continue
 			}
+			debugInfo = append(debugInfo, fmt.Sprintf("  - Matching rule: %v\n", rule))
+			if cov.Coverage < rule.Coverage {
+				debugInfo = append(debugInfo, fmt.Sprintf("  - actual coverage %.1f%% < required coverage %.1f%%\n", cov.Coverage, rule.Coverage))
+				errors = append(errors, fmt.Sprintf("%v: actual coverage %.1f%% < required coverage %.1f%%: matching rule is `%v`", cov, cov.Coverage, rule.Coverage, rule))
+			} else {
+				debugInfo = append(debugInfo, fmt.Sprintf("  - actual coverage %.1f%% >= required coverage %.1f%%\n", cov.Coverage, rule.Coverage))
+			}
+			continue Coverage
 		}
 
 		if cov.Coverage < config.DefaultCoverage {
@@ -331,6 +333,8 @@ Coverage:
 		}
 	}
 
+	// Ensure we have a trailing \n.
+	debugInfo = append(debugInfo, "")
 	debug := strings.Join(debugInfo, "\n")
 	if len(errors) > 0 {
 		return debug, fmt.Errorf("%s", strings.Join(errors, "\n"))
@@ -344,11 +348,12 @@ func generateConfig(coverage []CoverageLine) Config {
 		DefaultCoverage: 100,
 	}
 	for _, cov := range coverage {
-		config.Functions = append(config.Functions,
+		config.Rules = append(config.Rules,
 			Rule{
-				Comment:  "Generated rule for " + cov.Function + ", found at " + cov.Filename + ":" + cov.LineNumber,
-				Coverage: cov.Coverage,
-				Regex:    "^" + cov.Function + "$",
+				Comment:       "Generated rule for " + cov.Function + ", found at " + cov.Filename + ":" + cov.LineNumber,
+				Coverage:      cov.Coverage,
+				FunctionRegex: "^" + cov.Function + "$",
+				FilenameRegex: "^" + cov.Filename + "$",
 			})
 	}
 	return config

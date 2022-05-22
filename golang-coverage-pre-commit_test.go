@@ -36,22 +36,35 @@ func newTestOptions() Options {
 
 func TestMakeExampleConfig(t *testing.T) {
 	expected := strings.TrimLeft(`
-comment: Comment is not interpreted or used; it is provided as a structured way of adding comments to a config, so that automated editing is easier.
+comment: Comment is not interpreted or used; it is provided as a structured way of
+  adding comments to a config, so that automated editing is easier.
 default_coverage: 80
-functions:
-    - comment: Low coverage is acceptable for main()
-      regex: ^main$
-      coverage: 50
-    - comment: All the fooOrDie() functions should be fully tested because they panic() on failure
-      regex: OrDie$
-      coverage: 100
-filenames:
-    - comment: 'TODO: improve test coverage for parse_json.go'
-      regex: ^parse_json.go$
-      coverage: 73
-    - comment: Full coverage for other parsers
-      regex: ^parse.*.go$
-      coverage: 100
+rules:
+- comment: Low coverage is acceptable for main()
+  filename_regex: ""
+  function_regex: ^main$
+  coverage: 50
+- comment: All the fooOrDie() functions should be fully tested because they panic()
+    on failure
+  filename_regex: ""
+  function_regex: OrDie$
+  coverage: 100
+- comment: 'TODO: improve test coverage for parse_json.go'
+  filename_regex: ^parse_json.go$
+  function_regex: ""
+  coverage: 73
+- comment: Full coverage for other parsers
+  filename_regex: ^parse.*.go$
+  function_regex: ""
+  coverage: 100
+- comment: String() in urls.go has low coverage
+  filename_regex: ^String$
+  function_regex: ^urls.go$
+  coverage: 56
+- comment: String() everywhere else should have high coverage
+  filename_regex: ^String$
+  function_regex: ""
+  coverage: 100
 `, "\n")
 	assert.Equal(t, expected, makeExampleConfig())
 }
@@ -72,18 +85,19 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 		{
 			err: "coverage (1234.0) is outside the range 0-100 in",
 			input: `
-				default_coverage: 99
-				functions:
-				  - regex: asdf
-				    coverage: 1234`,
+							default_coverage: 99
+							rules:
+							- filename_regex: asdf
+							  coverage: 1234
+						`,
 		},
 		{
 			err: "coverage (-1.0) is outside the range 0-100 in",
 			input: `
-				default_coverage: 99
-				filenames:
-				  - regex: asdf
-				    coverage: -1`,
+							default_coverage: 99
+							rules:
+							- filename_regex: asdf
+							  coverage: -1`,
 		},
 	}
 	for _, test := range table {
@@ -91,7 +105,7 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 		// indentation.
 		yml := strings.ReplaceAll(test.input, "\t", "")
 		_, err := parseYAMLConfig([]byte(yml))
-		if assert.Error(t, err) {
+		if assert.Error(t, err, test.input) {
 			// Note: the error message seems mangled when it's printed here, but it's
 			// fine when printed for real.  I don't understand why and an hour of
 			// debugging has gotten me nowhere :(
@@ -107,25 +121,24 @@ func TestParseYAMLConfigSuccess(t *testing.T) {
 
 	yml := `
 default_coverage: 75
-functions:
-	- regex: pinky
+rules:
+	- function_regex: pinky
 		coverage: 20
 		comment: nobody understands pinky
-	- regex: the brain
+	- function_regex: the brain
 		coverage: 90
 		comment: the brain thinks he's understood
-filenames:
-	- regex: main.go
+	- filename_regex: main.go
 		coverage: 50
-	- regex: utils.go
+	- filename_regex: utils.go
 		coverage: 95
 `
 	yml = strings.ReplaceAll(yml, "\t", "  ")
 	config, err = parseYAMLConfig([]byte(yml))
 	assert.Nil(t, err)
 	assert.Equal(t, 75.0, config.DefaultCoverage)
-	assert.Equal(t, 2, len(config.Functions))
-	assert.Equal(t, "pinky", config.Functions[0].Regex)
+	assert.Equal(t, 4, len(config.Rules))
+	assert.Equal(t, "pinky", config.Rules[0].FunctionRegex)
 }
 
 func TestCaptureOutput(t *testing.T) {
@@ -378,21 +391,24 @@ func TestGenerateConfig(t *testing.T) {
 
 	expected := Config{
 		DefaultCoverage: 100.0,
-		Functions: []Rule{
+		Rules: []Rule{
 			{
-				Regex:    "^func1$",
-				Comment:  "Generated rule for func1, found at test.go:1",
-				Coverage: 20.0,
+				FilenameRegex: "^test.go$",
+				FunctionRegex: "^func1$",
+				Comment:       "Generated rule for func1, found at test.go:1",
+				Coverage:      20.0,
 			},
 			{
-				Regex:    "^func5$",
-				Comment:  "Generated rule for func5, found at test.go:2",
-				Coverage: 34.0,
+				FilenameRegex: "^test.go$",
+				FunctionRegex: "^func5$",
+				Comment:       "Generated rule for func5, found at test.go:2",
+				Coverage:      34.0,
 			},
 			{
-				Regex:    "^func17$",
-				Comment:  "Generated rule for func17, found at test.go:9",
-				Coverage: 12.3,
+				FilenameRegex: "^test.go$",
+				FunctionRegex: "^func17$",
+				Comment:       "Generated rule for func17, found at test.go:9",
+				Coverage:      12.3,
 			},
 		},
 	}
@@ -423,39 +439,21 @@ func TestCheckCoverage(t *testing.T) {
 		debug  []string
 	}{
 		{
-			desc:   "Function matching",
-			errors: []string{"utils.go:1:\tReadFileOrDie\t57.0%: coverage 57.0% < 100.0%: matching function rule"},
+			desc: "Function matching",
+			errors: []string{
+				"utils.go:1:\tReadFileOrDie\t57.0%: actual coverage 57.0% < required coverage 100.0%: matching rule",
+			},
 			debug: []string{
 				"Debug info for coverage matching",
 				"Line utils.go:1:\tReadFileOrDie\t57.0%\n",
-				"Function match: Regex: OrDie$ Coverage: 100",
+				"Matching rule: FilenameRegex:  FunctionRegex: OrDie$ Coverage: 100",
+				"actual coverage 57.0% < required coverage 100.0%",
 			},
 			input: `
 // Matches OrDie$, coverage too low.
 utils.go:1:	ReadFileOrDie	57.0%
 // Matches OrDie$, coverage acceptable.
-utils.go:1:	ParseIntOrDie	100.0%
-`,
-		},
-		{
-			desc: "Filename matching",
-			errors: []string{
-				"parse_json.go:1:\tFoo\t53.0%: coverage 53.0% < 73.0%: matching filename rule is",
-				"parse_yaml.go:1:\tBaz\t83.0%: coverage 83.0% < 100.0%: matching filename rule is",
-			},
-			debug: []string{
-				"Line parse_json.go:1:\tFoo\t53.0%\n",
-				"Filename match: Regex: ^parse_json.go$ Coverage: 73",
-			},
-			input: `
-// Matches ^parse_json.go$, coverage too low.
-parse_json.go:1:	Foo	53.0%
-// Matches ^parse_json.go$, coverage acceptable.  Ensures that ^parse.*.go$ isn't hit.
-parse_json.go:1:	Bar	80.0%
-// Matches ^parse_.*.go$, coverage too low.
-parse_yaml.go:1:	Baz	83.0%
-// Matches ^parse_.*.go$, coverage acceptable.
-parse_yaml.go:1:	Qwerty	100.0%
+utils.go:2:	ParseIntOrDie	100.0%
 `,
 		},
 		{
@@ -466,7 +464,7 @@ parse_yaml.go:1:	Qwerty	100.0%
 // Matches nothing, coverage too low.
 utils.go:1:	Foo	57.0%
 // Matches nothing, coverage acceptable.
-utils.go:1:	Bar	100.0%
+utils.go:2:	Bar	100.0%
 `,
 		},
 		{
