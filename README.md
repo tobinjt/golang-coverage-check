@@ -109,6 +109,19 @@ the current coverage level for existing code to prevent a reduction in coverage.
 golang-coverage-pre-commit --generate_config > .golang-coverage-pre-commit.yaml
 ```
 
+### Limitations
+
+You cannot have different coverage requirements for two functions with the same
+name in a single file. E.g. if you have `struct foo` and `struct bar`, each with
+a `String()` function, you cannot have different coverage requirements for the
+two `String()` functions. This is because the output of `go tool cover` is
+parsed, and that output doesn't include information about the function receiver.
+This could potentially be fixed by parsing the source code using
+<https://pkg.go.dev/go/parser> and building a map of line number to function
+information, then mapping each line of coverage output to function information.
+<https://pkg.go.dev/go/token#example-package-RetrievePositionInfo> is a
+potentially useful example.
+
 ## FAQ
 
 **How can I tell which lines of code have not been tested?**
