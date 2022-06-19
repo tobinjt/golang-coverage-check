@@ -194,6 +194,23 @@ func makeExampleConfig() string {
 	return config.String()
 }
 
+// Generate a Config from coverage information; used by --generate_config.
+func generateConfig(coverage []CoverageLine) Config {
+	config := Config{
+		DefaultCoverage: 100,
+	}
+	for _, cov := range coverage {
+		config.Rules = append(config.Rules,
+			Rule{
+				Comment:       "Generated rule for " + cov.Function + ", found at " + cov.Filename + ":" + cov.LineNumber,
+				Coverage:      cov.Coverage,
+				FunctionRegex: "^" + cov.Function + "$",
+				FilenameRegex: "^" + cov.Filename + "$",
+			})
+	}
+	return config
+}
+
 // parseYAMLConfig parses raw YAML into a Config, checks it for correctness, and
 // compiles every regex for speed.
 func parseYAMLConfig(yamlConf []byte) (Config, error) {
@@ -340,23 +357,6 @@ Coverage:
 		return debug, fmt.Errorf("%s", strings.Join(errors, "\n"))
 	}
 	return debug, nil
-}
-
-// Generate a Config from coverage information; used by --generate_config.
-func generateConfig(coverage []CoverageLine) Config {
-	config := Config{
-		DefaultCoverage: 100,
-	}
-	for _, cov := range coverage {
-		config.Rules = append(config.Rules,
-			Rule{
-				Comment:       "Generated rule for " + cov.Function + ", found at " + cov.Filename + ":" + cov.LineNumber,
-				Coverage:      cov.Coverage,
-				FunctionRegex: "^" + cov.Function + "$",
-				FilenameRegex: "^" + cov.Filename + "$",
-			})
-	}
-	return config
 }
 
 func realMain(options Options) (string, error) {

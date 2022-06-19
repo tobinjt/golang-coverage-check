@@ -69,6 +69,56 @@ rules:
 	assert.Equal(t, expected, makeExampleConfig())
 }
 
+func TestGenerateConfig(t *testing.T) {
+	coverage := []CoverageLine{
+		{
+			Filename:   "test.go",
+			LineNumber: "1",
+			Function:   "func1",
+			Coverage:   20.0,
+		},
+		{
+			Filename:   "test.go",
+			LineNumber: "2",
+			Function:   "func5",
+			Coverage:   34.0,
+		},
+		{
+			Filename:   "test.go",
+			LineNumber: "9",
+			Function:   "func17",
+			Coverage:   12.3,
+		},
+	}
+
+	expected := Config{
+		DefaultCoverage: 100.0,
+		Rules: []Rule{
+			{
+				FilenameRegex: "^test.go$",
+				FunctionRegex: "^func1$",
+				Comment:       "Generated rule for func1, found at test.go:1",
+				Coverage:      20.0,
+			},
+			{
+				FilenameRegex: "^test.go$",
+				FunctionRegex: "^func5$",
+				Comment:       "Generated rule for func5, found at test.go:2",
+				Coverage:      34.0,
+			},
+			{
+				FilenameRegex: "^test.go$",
+				FunctionRegex: "^func17$",
+				Comment:       "Generated rule for func17, found at test.go:9",
+				Coverage:      12.3,
+			},
+		},
+	}
+
+	generated := generateConfig(coverage)
+	assert.Equal(t, expected, generated)
+}
+
 func TestParseYAMLConfigErrors(t *testing.T) {
 	table := []struct {
 		input string
@@ -365,56 +415,6 @@ total:											(statements)		38.1%
 			assert.Contains(t, err.Error(), test.err)
 		}
 	}
-}
-
-func TestGenerateConfig(t *testing.T) {
-	coverage := []CoverageLine{
-		{
-			Filename:   "test.go",
-			LineNumber: "1",
-			Function:   "func1",
-			Coverage:   20.0,
-		},
-		{
-			Filename:   "test.go",
-			LineNumber: "2",
-			Function:   "func5",
-			Coverage:   34.0,
-		},
-		{
-			Filename:   "test.go",
-			LineNumber: "9",
-			Function:   "func17",
-			Coverage:   12.3,
-		},
-	}
-
-	expected := Config{
-		DefaultCoverage: 100.0,
-		Rules: []Rule{
-			{
-				FilenameRegex: "^test.go$",
-				FunctionRegex: "^func1$",
-				Comment:       "Generated rule for func1, found at test.go:1",
-				Coverage:      20.0,
-			},
-			{
-				FilenameRegex: "^test.go$",
-				FunctionRegex: "^func5$",
-				Comment:       "Generated rule for func5, found at test.go:2",
-				Coverage:      34.0,
-			},
-			{
-				FilenameRegex: "^test.go$",
-				FunctionRegex: "^func17$",
-				Comment:       "Generated rule for func17, found at test.go:9",
-				Coverage:      12.3,
-			},
-		},
-	}
-
-	generated := generateConfig(coverage)
-	assert.Equal(t, expected, generated)
 }
 
 func splitAndStripComments(input string) []string {
