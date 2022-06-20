@@ -17,6 +17,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"os/exec"
@@ -43,6 +46,9 @@ type Options struct {
 	// The file to read module metadata from, "go.mod" except when testing error
 	// handling.
 	goMod string
+	// The directory makeFunctionLocationMap() parses, "." except when testing error
+	// handling.
+	dirToParse string
 	// Flags.
 	// Set by --example_config; output an example config and exit.
 	outputExampleConfig bool
@@ -84,6 +90,7 @@ func newOptions() Options {
 		createTemp:    os.CreateTemp,
 		configFile:    ".golang-coverage-pre-commit.yaml",
 		goMod:         "go.mod",
+		dirToParse:    ".",
 		programName:   os.Args[0],
 		rawArgs:       args,
 		stdout:        os.Stdout,
@@ -229,6 +236,55 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 		}
 	}
 	return config, nil
+}
+
+type FunctionLocation struct {
+	// The filename the function is defined in.
+	Filename string
+	// The line number of the function definition.
+	LineNumber string
+	// The function name.
+	Function string
+	// For functions: empty string.  For methods: the receiver class.
+	Receiver string
+}
+
+func (fl FunctionLocation) key() string {
+	return fl.Filename + ":" + fl.LineNumber
+}
+
+// makeFunctionLocationMap parses the code in the current directory and
+// constructs a map from filename:linenumber to FunctionLocation.
+func makeFunctionLocationMap(opts Options) (map[string]FunctionLocation, error) {
+	fmap := make(map[string]FunctionLocation)
+	fset := token.NewFileSet()
+	packageMap, err := parser.ParseDir(fset, opts.dirToParse, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	for _, pkg := range packageMap {
+		for _, file := range pkg.Files {
+			for _, decl := range file.Decls {
+				if function, ok := decl.(*ast.FuncDecl); ok {
+					pos := fset.Position(function.Pos())
+					fl := FunctionLocation{
+						Filename:   pos.Filename,
+						LineNumber: fmt.Sprintf("%d", pos.Line),
+						Function:   function.Name.Name,
+						Receiver:   "",
+					}
+					if function.Recv != nil {
+						// This is ugly, but I haven't found a better way to get the string
+						// out of the data structure.
+						fl.Receiver = fmt.Sprintf("%v", function.Recv.List[0].Type)
+					}
+					fmap[fl.key()] = fl
+				}
+			}
+		}
+	}
+
+	return fmap, nil
 }
 
 // captureOutput runs a command and returns the output on success and an error

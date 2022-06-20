@@ -191,6 +191,44 @@ rules:
 	assert.Equal(t, "pinky", config.Rules[0].FunctionRegex)
 }
 
+func TestMakeFunctionLocationMapFailure(t *testing.T) {
+	options := newTestOptions()
+	options.dirToParse = "does-not-exist"
+	_, err := makeFunctionLocationMap(options)
+	assert.Error(t, err)
+}
+
+func TestMakeFunctionLocationMapSuccess(t *testing.T) {
+	fmap, err := makeFunctionLocationMap(newTestOptions())
+	assert.Nil(t, err)
+	fls := []FunctionLocation{
+		{
+			Filename:   "functions-for-testing-makeFunctionLocationMap.go",
+			LineNumber: "20",
+			Function:   "functionAtLine20",
+			Receiver:   "",
+		},
+		{
+			Filename:   "functions-for-testing-makeFunctionLocationMap.go",
+			LineNumber: "26",
+			Function:   "String",
+			Receiver:   "methodReceiver",
+		},
+	}
+	for _, fl := range fls {
+		key := fl.key()
+		if assert.Contains(t, fmap, key) {
+			assert.Equal(t, fl, fmap[key])
+		}
+	}
+}
+
+func TestMakeFunctionLocationMapSupport(t *testing.T) {
+	assert.Equal(t, "This function is at line 20 to test makeFunctionLocationMap()", functionAtLine20())
+	mr := methodReceiver{}
+	assert.Equal(t, "This method has a methodReceiver receiver to test makeFunctionLocationMap()", mr.String())
+}
+
 func TestCaptureOutput(t *testing.T) {
 	output, err := captureOutput("cat", "/non-existent")
 	assert.Error(t, err)
