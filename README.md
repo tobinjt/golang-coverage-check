@@ -31,28 +31,34 @@ rules:
   - comment: Low coverage is acceptable for main()
     filename_regex: ""
     function_regex: ^main$
+    receiver_regex: ""
     coverage: 50
   - comment:
       All the fooOrDie() functions should be fully tested because they panic()
       on failure
     filename_regex: ""
     function_regex: OrDie$
+    receiver_regex: ""
     coverage: 100
   - comment: "TODO: improve test coverage for parse_json.go"
     filename_regex: ^parse_json.go$
     function_regex: ""
+    receiver_regex: ""
     coverage: 73
   - comment: Full coverage for other parsers
     filename_regex: ^parse.*.go$
     function_regex: ""
+    receiver_regex: ""
     coverage: 100
-  - comment: String() in urls.go has low coverage
-    filename_regex: ^String$
-    function_regex: ^urls.go$
+  - comment: Url.String() has low coverage
+    filename_regex: ^urls.go$
+    function_regex: ^String$
+    receiver_regex: ^Url$
     coverage: 56
   - comment: String() everywhere else should have high coverage
     filename_regex: ^String$
     function_regex: ""
+    receiver_regex: ""
     coverage: 100
 ```
 
@@ -70,7 +76,8 @@ rules:
 
 **_Rules_**
 
-The `functions` and `filenames` rules have exactly the same fields.
+Rules have the following fields; `coverage` is required, and at least one regex
+must be non-empty.
 
 - `comment`: unused by `golang-coverage-pre-commit`, it exists to support
   structured comments that survive de-serialisation and re-serialisation, e.g.
@@ -79,6 +86,8 @@ The `functions` and `filenames` rules have exactly the same fields.
   Ignored if empty.
 - `function_regex`: the regular expression that the function name is matched
   against. Ignored if empty.
+- `receiver_regex`: the regular expression that the method receiver name is
+  matched against. Ignored if empty.
 - `coverage`: the required coverage level for lines matched by this rule.
 
 ### Order of evaluation
@@ -108,19 +117,6 @@ the current coverage level for existing code to prevent a reduction in coverage.
 ```shell
 golang-coverage-pre-commit --generate_config > .golang-coverage-pre-commit.yaml
 ```
-
-### Limitations
-
-You cannot have different coverage requirements for two functions with the same
-name in a single file. E.g. if you have `struct foo` and `struct bar`, each with
-a `String()` function, you cannot have different coverage requirements for the
-two `String()` functions. This is because the output of `go tool cover` is
-parsed, and that output doesn't include information about the function receiver.
-This could potentially be fixed by parsing the source code using
-<https://pkg.go.dev/go/parser> and building a map of line number to function
-information, then mapping each line of coverage output to function information.
-<https://pkg.go.dev/go/token#example-package-RetrievePositionInfo> is a
-potentially useful example.
 
 ## FAQ
 

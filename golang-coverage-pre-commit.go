@@ -124,6 +124,8 @@ type Rule struct {
 	FilenameRegex string `yaml:"filename_regex"`
 	// Regex used when matching against a function.
 	FunctionRegex string `yaml:"function_regex"`
+	// Regex used when matching against a method receiver.
+	ReceiverRegex string `yaml:"receiver_regex"`
 	// Coverage level required for this function or filename; this is a floating
 	// point percentage, so it should be >= 0 and <= 100.
 	Coverage float64
@@ -131,11 +133,13 @@ type Rule struct {
 	compiledFilenameRegex *regexp.Regexp
 	// compiledFunctionRegex is the result of regexp.MustCompile(FunctionRegex).
 	compiledFunctionRegex *regexp.Regexp
+	// compiledFunctionRegex is the result of regexp.MustCompile(ReceiverRegex).
+	compiledReceiverRegex *regexp.Regexp
 }
 
 func (rule Rule) String() string {
-	return fmt.Sprintf("FilenameRegex: %v FunctionRegex: %v Coverage: %v Comment: %v",
-		rule.FilenameRegex, rule.FunctionRegex, rule.Coverage, rule.Comment)
+	return fmt.Sprintf("FilenameRegex: %v FunctionRegex: %v ReceiverRegex: %v Coverage: %v Comment: %v",
+		rule.FilenameRegex, rule.FunctionRegex, rule.ReceiverRegex, rule.Coverage, rule.Comment)
 }
 
 // Config represents an entire user config loaded from .golang-coverage-pre-commit.yaml.
@@ -186,9 +190,10 @@ func makeExampleConfig() string {
 				Coverage:      100,
 			},
 			{
-				Comment:       "String() in urls.go has low coverage",
-				FunctionRegex: "^urls.go$",
-				FilenameRegex: "^String$",
+				Comment:       "Url.String() has low coverage",
+				FilenameRegex: "^urls.go$",
+				FunctionRegex: "^String$",
+				ReceiverRegex: "^Url$",
 				Coverage:      56,
 			},
 			{
@@ -206,6 +211,7 @@ func generateConfig(coverage []CoverageLine) Config {
 	config := Config{
 		DefaultCoverage: 100,
 	}
+	// TODO: support ReceiverRegex.
 	for _, cov := range coverage {
 		config.Rules = append(config.Rules,
 			Rule{
@@ -229,8 +235,12 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 		return config, fmt.Errorf("default coverage (%.1f) is outside the range 0-100", config.DefaultCoverage)
 	}
 	for i := range config.Rules {
+		if config.Rules[i].FilenameRegex == "" && config.Rules[i].FunctionRegex == "" && config.Rules[i].ReceiverRegex == "" {
+			return config, fmt.Errorf("every regex is an empty string in rule %v", config.Rules[i])
+		}
 		config.Rules[i].compiledFilenameRegex = regexp.MustCompile(config.Rules[i].FilenameRegex)
 		config.Rules[i].compiledFunctionRegex = regexp.MustCompile(config.Rules[i].FunctionRegex)
+		config.Rules[i].compiledReceiverRegex = regexp.MustCompile(config.Rules[i].ReceiverRegex)
 		if config.Rules[i].Coverage < 0 || config.Rules[i].Coverage > 100 {
 			return config, fmt.Errorf("coverage (%.1f) is outside the range 0-100 in %v", config.Rules[i].Coverage, config.Rules[i])
 		}
@@ -374,7 +384,7 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 
 // checkCoverage checks that each function meets the required level of coverage,
 // returning debugging information and an error if appropriate.
-func checkCoverage(config Config, coverage []CoverageLine) (string, error) {
+func checkCoverage(config Config, coverage []CoverageLine, functionLocationMap map[string]FunctionLocation) (string, error) {
 	errors := []string{}
 	debugInfo := []string{"Debug info for coverage matching"}
 
@@ -387,6 +397,13 @@ Coverage:
 			}
 			if rule.FunctionRegex != "" && !rule.compiledFunctionRegex.MatchString(cov.Function) {
 				continue
+			}
+			if rule.ReceiverRegex != "" {
+				key := cov.Filename + ":" + cov.LineNumber
+				receiver := functionLocationMap[key].Receiver
+				if !rule.compiledReceiverRegex.MatchString(receiver) {
+					continue
+				}
 			}
 			debugInfo = append(debugInfo, fmt.Sprintf("  - Matching rule: %v\n", rule))
 			if cov.Coverage < rule.Coverage {
@@ -453,6 +470,11 @@ func realMain(options Options) (string, error) {
 		return "", fmt.Errorf("failed parsing config %v: %w", options.configFile, err)
 	}
 
+	functionLocationMap, err := makeFunctionLocationMap(options)
+	if err != nil {
+		return "", err
+	}
+
 	rawCoverage, err := goCover(options)
 	if err != nil {
 		return "", err
@@ -467,7 +489,7 @@ func realMain(options Options) (string, error) {
 		return newConfig.String(), nil
 	}
 
-	debugInfo, err := checkCoverage(config, parsedCoverage)
+	debugInfo, err := checkCoverage(config, parsedCoverage, functionLocationMap)
 	if options.debugMatching {
 		return debugInfo, err
 	}

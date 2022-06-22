@@ -43,27 +43,33 @@ rules:
 - comment: Low coverage is acceptable for main()
 	filename_regex: ""
 	function_regex: ^main$
+	receiver_regex: ""
 	coverage: 50
 - comment: All the fooOrDie() functions should be fully tested because they panic()
 		on failure
 	filename_regex: ""
 	function_regex: OrDie$
+	receiver_regex: ""
 	coverage: 100
 - comment: 'TODO: improve test coverage for parse_json.go'
 	filename_regex: ^parse_json.go$
 	function_regex: ""
+	receiver_regex: ""
 	coverage: 73
 - comment: Full coverage for other parsers
 	filename_regex: ^parse.*.go$
 	function_regex: ""
+	receiver_regex: ""
 	coverage: 100
-- comment: String() in urls.go has low coverage
-	filename_regex: ^String$
-	function_regex: ^urls.go$
+- comment: Url.String() has low coverage
+	filename_regex: ^urls.go$
+	function_regex: ^String$
+	receiver_regex: ^Url$
 	coverage: 56
 - comment: String() everywhere else should have high coverage
 	filename_regex: ^String$
 	function_regex: ""
+	receiver_regex: ""
 	coverage: 100
 `, "\t", "  "), "\n"), "\n")
 	actual := strings.Split(makeExampleConfig(), "\n")
@@ -149,6 +155,13 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 							rules:
 							- filename_regex: asdf
 							!!coverage: -1`,
+		},
+		{
+			err: "every regex is an empty string in rule",
+			input: `
+							default_coverage: 99
+							rules:
+							- coverage: 1`,
 		},
 	}
 	for _, test := range table {
@@ -469,10 +482,18 @@ func splitAndStripComments(input string) []string {
 
 func TestCheckCoverage(t *testing.T) {
 	yml := makeExampleConfig()
+	yml += strings.ReplaceAll(`
+- comment: methodReceiver.String()
+	function_regex: ^String$
+	receiver_regex: ^methodReceiver$
+	coverage: 100
+`, "\t", "  ")
 	config, err := parseYAMLConfig([]byte(yml))
 	assert.Nil(t, err)
 	config.Comment = "Config for testing checkCoverage()"
 	options := newTestOptions()
+	functionLocationMap, err := makeFunctionLocationMap(options)
+	assert.Nil(t, err)
 
 	tests := []struct {
 		input  string
@@ -480,6 +501,7 @@ func TestCheckCoverage(t *testing.T) {
 		errors []string
 		debug  []string
 	}{
+		// TODO: filename matching?
 		{
 			desc: "Function matching",
 			errors: []string{
@@ -488,7 +510,7 @@ func TestCheckCoverage(t *testing.T) {
 			debug: []string{
 				"Debug info for coverage matching",
 				"Line utils.go:1:\tReadFileOrDie\t57.0%\n",
-				"Matching rule: FilenameRegex:  FunctionRegex: OrDie$ Coverage: 100",
+				"Matching rule: FilenameRegex:  FunctionRegex: OrDie$ ReceiverRegex:  Coverage: 100",
 				"actual coverage 57.0% < required coverage 100.0%",
 			},
 			input: `
@@ -518,12 +540,22 @@ utils.go:2:	Bar	100.0%
 utils.go:1:	Bar	100.0%
 `,
 		},
+		{
+			desc:   "Receiver matching",
+			errors: []string{},
+			debug: []string{
+				"Line functions-for-testing-makeFunctionLocationMap.go:26:\tString\t100.0%\n",
+			},
+			input: `
+functions-for-testing-makeFunctionLocationMap.go:26:	String	100.0%
+`,
+		},
 	}
 
 	for _, test := range tests {
 		coverage, err := parseCoverageOutput(options, splitAndStripComments(test.input))
 		assert.Nil(t, err)
-		debug, err := checkCoverage(config, coverage)
+		debug, err := checkCoverage(config, coverage, functionLocationMap)
 		if len(test.errors) == 0 {
 			assert.Nil(t, err)
 		}
