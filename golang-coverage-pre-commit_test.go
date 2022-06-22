@@ -35,38 +35,39 @@ func newTestOptions() Options {
 }
 
 func TestMakeExampleConfig(t *testing.T) {
-	expected := strings.TrimLeft(`
+	expected := strings.Split(strings.TrimLeft(strings.ReplaceAll(`
 comment: Comment is not interpreted or used; it is provided as a structured way of
-  adding comments to a config, so that automated editing is easier.
+	adding comments to a config, so that automated editing is easier.
 default_coverage: 80
 rules:
 - comment: Low coverage is acceptable for main()
-  filename_regex: ""
-  function_regex: ^main$
-  coverage: 50
+	filename_regex: ""
+	function_regex: ^main$
+	coverage: 50
 - comment: All the fooOrDie() functions should be fully tested because they panic()
-    on failure
-  filename_regex: ""
-  function_regex: OrDie$
-  coverage: 100
+		on failure
+	filename_regex: ""
+	function_regex: OrDie$
+	coverage: 100
 - comment: 'TODO: improve test coverage for parse_json.go'
-  filename_regex: ^parse_json.go$
-  function_regex: ""
-  coverage: 73
+	filename_regex: ^parse_json.go$
+	function_regex: ""
+	coverage: 73
 - comment: Full coverage for other parsers
-  filename_regex: ^parse.*.go$
-  function_regex: ""
-  coverage: 100
+	filename_regex: ^parse.*.go$
+	function_regex: ""
+	coverage: 100
 - comment: String() in urls.go has low coverage
-  filename_regex: ^String$
-  function_regex: ^urls.go$
-  coverage: 56
+	filename_regex: ^String$
+	function_regex: ^urls.go$
+	coverage: 56
 - comment: String() everywhere else should have high coverage
-  filename_regex: ^String$
-  function_regex: ""
-  coverage: 100
-`, "\n")
-	assert.Equal(t, expected, makeExampleConfig())
+	filename_regex: ^String$
+	function_regex: ""
+	coverage: 100
+`, "\t", "  "), "\n"), "\n")
+	actual := strings.Split(makeExampleConfig(), "\n")
+	assert.Equal(t, expected, actual)
 }
 
 func TestGenerateConfig(t *testing.T) {
@@ -138,7 +139,7 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 							default_coverage: 99
 							rules:
 							- filename_regex: asdf
-							  coverage: 1234
+							!!coverage: 1234
 						`,
 		},
 		{
@@ -147,13 +148,14 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 							default_coverage: 99
 							rules:
 							- filename_regex: asdf
-							  coverage: -1`,
+							!!coverage: -1`,
 		},
 	}
 	for _, test := range table {
 		// This is ugly but it's the only way I've found to get reasonable
 		// indentation.
 		yml := strings.ReplaceAll(test.input, "\t", "")
+		yml = strings.ReplaceAll(yml, "!!", "  ")
 		_, err := parseYAMLConfig([]byte(yml))
 		if assert.Error(t, err, test.input) {
 			// Note: the error message seems mangled when it's printed here, but it's
@@ -466,9 +468,11 @@ func splitAndStripComments(input string) []string {
 }
 
 func TestCheckCoverage(t *testing.T) {
-	config, err := parseYAMLConfig([]byte(makeExampleConfig()))
+	yml := makeExampleConfig()
+	config, err := parseYAMLConfig([]byte(yml))
 	assert.Nil(t, err)
 	config.Comment = "Config for testing checkCoverage()"
+	options := newTestOptions()
 
 	tests := []struct {
 		input  string
@@ -516,7 +520,6 @@ utils.go:1:	Bar	100.0%
 		},
 	}
 
-	options := newTestOptions()
 	for _, test := range tests {
 		coverage, err := parseCoverageOutput(options, splitAndStripComments(test.input))
 		assert.Nil(t, err)
