@@ -67,8 +67,8 @@ rules:
 	receiver_regex: ^Url$
 	coverage: 56
 - comment: String() everywhere else should have high coverage
-	filename_regex: ^String$
-	function_regex: ""
+	filename_regex: ""
+	function_regex: ^String$
 	receiver_regex: ""
 	coverage: 100
 `, "\t", "  "), "\n"), "\n")
@@ -470,9 +470,9 @@ total:											(statements)		38.1%
 	}
 }
 
-func splitAndStripComments(input string) []string {
+func stripComments(input []string) []string {
 	output := []string{}
-	for _, line := range strings.Split(input, "\n") {
+	for _, line := range input {
 		if !strings.HasPrefix(line, "//") {
 			output = append(output, line)
 		}
@@ -481,89 +481,265 @@ func splitAndStripComments(input string) []string {
 }
 
 func TestCheckCoverage(t *testing.T) {
-	yml := makeExampleConfig()
-	yml += strings.ReplaceAll(`
-- comment: methodReceiver.String()
-	function_regex: ^String$
-	receiver_regex: ^methodReceiver$
-	coverage: 100
-`, "\t", "  ")
-	config, err := parseYAMLConfig([]byte(yml))
-	assert.Nil(t, err)
-	config.Comment = "Config for testing checkCoverage()"
-	options := newTestOptions()
-	functionLocationMap, err := makeFunctionLocationMap(options)
-	assert.Nil(t, err)
-
 	tests := []struct {
-		input  string
-		desc   string
-		errors []string
-		debug  []string
+		desc                string
+		config              Config
+		functionLocationMap map[string]FunctionLocation
+		input               []string
+		errors              []string
+		debug               []string
 	}{
-		// TODO: filename matching?
+
 		{
-			desc: "Function matching",
+			desc: "Filename matching",
+			config: Config{
+				Rules: []Rule{
+					{
+						FilenameRegex: "^utils.go$",
+						Coverage:      100,
+					},
+				},
+			},
+			input: []string{
+				"// Matches, insufficient coverage.",
+				"utils.go:1:	ReadFileOrDie	57.0%",
+				"// Matches, sufficient coverage.",
+				"utils.go:2:	ParseIntOrDie	100.0%",
+				"// Doesn't match, falls through to default.",
+				"main.go:1:	main	22.0%",
+			},
 			errors: []string{
 				"utils.go:1:\tReadFileOrDie\t57.0%: actual coverage 57.0% < required coverage 100.0%: matching rule",
+				"matching rule is `FilenameRegex: ^utils.go$ FunctionRegex:  ReceiverRegex:  Coverage: 100 Comment: `",
 			},
 			debug: []string{
+				// First coverage line.
+				"Debug info for coverage matching",
+				"Line utils.go:1:\tReadFileOrDie\t57.0%\n",
+				"Matching rule: FilenameRegex: ^utils.go$ FunctionRegex:  ReceiverRegex:  Coverage: 100",
+				"actual coverage 57.0% < required coverage 100.0%",
+				// Second coverage line.
+				"Line utils.go:2:\tParseIntOrDie\t100.0%",
+				"Matching rule: FilenameRegex: ^utils.go$ FunctionRegex:  ReceiverRegex:  Coverage: 100 Comment:",
+				"actual coverage 100.0% >= required coverage 100.0%",
+				// Third coverage line.
+				"Line main.go:1:\tmain\t22.0%",
+				"Default coverage 0.0% satisfied",
+			},
+		},
+
+		{
+			desc: "Function matching",
+			config: Config{
+				Rules: []Rule{
+					{
+						FunctionRegex: "OrDie$",
+						Coverage:      100,
+					},
+				},
+			},
+			input: []string{
+				"// Matches, insufficient coverage.",
+				"utils.go:1:	ReadFileOrDie	57.0%",
+				"// Matches, sufficient coverage.",
+				"utils.go:2:	ParseIntOrDie	100.0%",
+				"// Doesn't match, falls through to default.",
+				"main.go:1:	main	100.0%",
+			},
+			errors: []string{
+				"utils.go:1:\tReadFileOrDie\t57.0%: actual coverage 57.0% < required coverage 100.0%: matching rule",
+				"matching rule is `FilenameRegex:  FunctionRegex: OrDie$ ReceiverRegex:  Coverage: 100 Comment: `",
+			},
+			debug: []string{
+				// First coverage line.
 				"Debug info for coverage matching",
 				"Line utils.go:1:\tReadFileOrDie\t57.0%\n",
 				"Matching rule: FilenameRegex:  FunctionRegex: OrDie$ ReceiverRegex:  Coverage: 100",
 				"actual coverage 57.0% < required coverage 100.0%",
+				// Second coverage line.
+				"Line utils.go:2:\tParseIntOrDie\t100.0%",
+				"Matching rule: FilenameRegex:  FunctionRegex: OrDie$ ReceiverRegex:  Coverage: 100 Comment:",
+				"actual coverage 100.0% >= required coverage 100.0%",
+				// Third coverage line.
+				"Line main.go:1:\tmain\t100.0%",
+				"Default coverage 0.0% satisfied",
 			},
-			input: `
-// Matches OrDie$, coverage too low.
-utils.go:1:	ReadFileOrDie	57.0%
-// Matches OrDie$, coverage acceptable.
-utils.go:2:	ParseIntOrDie	100.0%
-`,
 		},
+
 		{
-			desc:   "Default matching",
-			errors: []string{"utils.go:1:\tFoo\t57.0%: coverage 57.0% < 80.0%: default coverage requirement 80.0%"},
-			debug:  []string{"Line utils.go:1:\tFoo\t57.0%\n  - Default coverage not satisfied"},
-			input: `
-// Matches nothing, coverage too low.
-utils.go:1:	Foo	57.0%
-// Matches nothing, coverage acceptable.
-utils.go:2:	Bar	100.0%
-`,
+			desc: "Receiver matching",
+			config: Config{
+				Rules: []Rule{
+					{
+						ReceiverRegex: "^testReceiver$",
+						Coverage:      100,
+					},
+				},
+			},
+			input: []string{
+				"// Matches, insufficient coverage.",
+				"utils.go:1:	Commit	57.0%",
+				"// Matches, sufficient coverage.",
+				"utils.go:2:	String	100.0%",
+				"// Doesn't match, falls through to default.",
+				"main.go:1:	main	100.0%",
+			},
+			functionLocationMap: map[string]FunctionLocation{
+				"utils.go:1": {
+					Filename:   "utils.go",
+					LineNumber: "1",
+					Function:   "Commit",
+					Receiver:   "testReceiver",
+				},
+				"utils.go:2": {
+					Filename:   "utils.go",
+					LineNumber: "2",
+					Function:   "String",
+					Receiver:   "testReceiver",
+				},
+			},
+			errors: []string{
+				"utils.go:1:\tCommit\t57.0%: actual coverage 57.0% < required coverage 100.0%: matching rule",
+				"matching rule is `FilenameRegex:  FunctionRegex:  ReceiverRegex: ^testReceiver$ Coverage: 100 Comment: `",
+			},
+			debug: []string{
+				// First coverage line.
+				"Debug info for coverage matching",
+				"Line utils.go:1:\tCommit\t57.0%\n",
+				"Matching rule: FilenameRegex:  FunctionRegex:  ReceiverRegex: ^testReceiver$ Coverage: 100",
+				"actual coverage 57.0% < required coverage 100.0%",
+				// Second coverage line.
+				"Line utils.go:2:\tString\t100.0%",
+				"Matching rule: FilenameRegex:  FunctionRegex:  ReceiverRegex: ^testReceiver$ Coverage: 100",
+				"actual coverage 100.0% >= required coverage 100.0%",
+				// Third coverage line.
+				"Line main.go:1:\tmain\t100.0%",
+				"Default coverage 0.0% satisfied",
+			},
 		},
+
 		{
-			desc:   "No errors found",
-			errors: []string{},
-			debug:  []string{"Line utils.go:1:\tBar\t100.0%\n  - Default coverage satisfied"},
-			input: `
-// Matches nothing, coverage acceptable.
-utils.go:1:	Bar	100.0%
-`,
+			desc: "Filename, Function, and Receiver matching",
+			config: Config{
+				Rules: []Rule{
+					{
+						FilenameRegex: "^utils.go$",
+						FunctionRegex: "^Commit$",
+						ReceiverRegex: "^testReceiver$",
+						Coverage:      100,
+					},
+					{
+						FilenameRegex: "^utils.go$",
+						FunctionRegex: "^String$",
+						ReceiverRegex: "^testReceiver$",
+						Coverage:      100,
+					},
+				},
+			},
+			input: []string{
+				"// Matches, insufficient coverage.",
+				"utils.go:1:	Commit	57.0%",
+				"// Matches, sufficient coverage.",
+				"utils.go:2:	String	100.0%",
+				"// Doesn't match, falls through to default.",
+				"main.go:1:	main	100.0%",
+			},
+			functionLocationMap: map[string]FunctionLocation{
+				"utils.go:1": {
+					Filename:   "utils.go",
+					LineNumber: "1",
+					Function:   "Commit",
+					Receiver:   "testReceiver",
+				},
+				"utils.go:2": {
+					Filename:   "utils.go",
+					LineNumber: "2",
+					Function:   "String",
+					Receiver:   "testReceiver",
+				},
+			},
+			errors: []string{
+				"utils.go:1:\tCommit\t57.0%: actual coverage 57.0% < required coverage 100.0%: matching rule",
+				"matching rule is `FilenameRegex: ^utils.go$ FunctionRegex: ^Commit$ ReceiverRegex: ^testReceiver$ Coverage: 100",
+			},
+			debug: []string{
+				// First coverage line.
+				"Debug info for coverage matching",
+				"Line utils.go:1:\tCommit\t57.0%\n",
+				"Matching rule: FilenameRegex: ^utils.go$ FunctionRegex: ^Commit$ ReceiverRegex: ^testReceiver$ Coverage: 100",
+				"actual coverage 57.0% < required coverage 100.0%",
+				// Second coverage line.
+				"Line utils.go:2:\tString\t100.0%",
+				"Matching rule: FilenameRegex: ^utils.go$ FunctionRegex: ^String$ ReceiverRegex: ^testReceiver$ Coverage: 100",
+				"actual coverage 100.0% >= required coverage 100.0%",
+				// Third coverage line.
+				"Line main.go:1:\tmain\t100.0%",
+				"Default coverage 0.0% satisfied",
+			},
 		},
+
 		{
-			desc:   "Receiver matching",
+			desc: "Default coverage",
+			config: Config{
+				DefaultCoverage: 90,
+			},
+			input: []string{
+				"// Insufficient coverage.",
+				"utils.go:1:	ReadFileOrDie	57.0%",
+				"// Sufficient coverage.",
+				"utils.go:2:	ParseIntOrDie	100.0%",
+			},
+			errors: []string{
+				"utils.go:1:\tReadFileOrDie\t57.0%: actual coverage 57.0% < default coverage 90.0%",
+			},
+			debug: []string{
+				// First coverage line.
+				"Debug info for coverage matching",
+				"Line utils.go:1:\tReadFileOrDie\t57.0%\n",
+				"Default coverage 90.0% not satisfied",
+				// Second coverage line.
+				"Line utils.go:2:\tParseIntOrDie\t100.0%",
+				"Default coverage 90.0% satisfied",
+			},
+		},
+
+		{
+			desc: "No errors",
+			config: Config{
+				DefaultCoverage: 90,
+			},
+			input: []string{
+				"// Sufficient coverage.",
+				"utils.go:2:	ParseIntOrDie	100.0%",
+			},
 			errors: []string{},
 			debug: []string{
-				"Line functions-for-testing-makeFunctionLocationMap.go:26:\tString\t100.0%\n",
+				// First coverage line.
+				"Line utils.go:2:\tParseIntOrDie\t100.0%",
+				"Default coverage 90.0% satisfied",
 			},
-			input: `
-functions-for-testing-makeFunctionLocationMap.go:26:	String	100.0%
-`,
 		},
 	}
 
+	options := newTestOptions()
 	for _, test := range tests {
-		coverage, err := parseCoverageOutput(options, splitAndStripComments(test.input))
+		coverage, err := parseCoverageOutput(options, stripComments(test.input))
 		assert.Nil(t, err)
-		debug, err := checkCoverage(config, coverage, functionLocationMap)
+		config, err := validateConfig(test.config)
+		assert.Nil(t, err)
+
+		debug, err := checkCoverage(config, coverage, test.functionLocationMap)
 		if len(test.errors) == 0 {
 			assert.Nil(t, err)
-		}
-		for i := range test.errors {
-			assert.Contains(t, err.Error(), test.errors[i], test.desc)
+		} else {
+			if assert.Error(t, err) {
+				for i := range test.errors {
+					assert.Contains(t, err.Error(), test.errors[i], "err: "+test.desc)
+				}
+			}
 		}
 		for i := range test.debug {
-			assert.Contains(t, debug, test.debug[i], test.desc)
+			assert.Contains(t, debug, test.debug[i], "debug: "+test.desc)
 		}
 	}
 }
@@ -667,7 +843,7 @@ func TestRealMain(t *testing.T) {
 		// Note that from here on the failures are that coverage isn't high enough.
 		{
 			desc:   "checkCoverage",
-			err:    "golang-coverage-pre-commit.go:48:\tString\t31.0%: coverage 31.0% < 100.0%: default coverage ",
+			err:    "golang-coverage-pre-commit.go:48:\tString\t31.0%: actual coverage 31.0% < default coverage 100.0%",
 			output: "",
 			mod: func(opts Options) Options {
 				opts.captureOutput = func(string, ...string) ([]string, error) {
@@ -678,7 +854,7 @@ func TestRealMain(t *testing.T) {
 		},
 		{
 			desc:   "checkCoverage, with debugging output",
-			err:    "golang-coverage-pre-commit.go:48:\tString\t31.0%: coverage 31.0% < 100.0%: default coverage ",
+			err:    "golang-coverage-pre-commit.go:48:\tString\t31.0%: actual coverage 31.0% < default coverage 100.0",
 			output: "Debug info for coverage matching",
 			mod: func(opts Options) Options {
 				opts.rawArgs = append(opts.rawArgs, "--debug_matching")

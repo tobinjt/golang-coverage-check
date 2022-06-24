@@ -198,7 +198,7 @@ func makeExampleConfig() string {
 			},
 			{
 				Comment:       "String() everywhere else should have high coverage",
-				FilenameRegex: "^String$",
+				FunctionRegex: "^String$",
 				Coverage:      100,
 			},
 		},
@@ -224,13 +224,10 @@ func generateConfig(coverage []CoverageLine) Config {
 	return config
 }
 
-// parseYAMLConfig parses raw YAML into a Config, checks it for correctness, and
-// compiles every regex for speed.
-func parseYAMLConfig(yamlConf []byte) (Config, error) {
-	var config Config
-	if err := yaml.UnmarshalStrict(yamlConf, &config); err != nil {
-		return config, fmt.Errorf("failed parsing YAML: %w", err)
-	}
+// validateConfig checks a config for correctness, including compiling every
+// regex and caching the result.
+// TODO: separate the tests for validateConfig and parseYAMLConfig.
+func validateConfig(config Config) (Config, error) {
 	if config.DefaultCoverage < 0 || config.DefaultCoverage > 100 {
 		return config, fmt.Errorf("default coverage (%.1f) is outside the range 0-100", config.DefaultCoverage)
 	}
@@ -246,6 +243,16 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 		}
 	}
 	return config, nil
+}
+
+// parseYAMLConfig parses raw YAML into a Config, checks it for correctness, and
+// compiles every regex for speed.
+func parseYAMLConfig(yamlConf []byte) (Config, error) {
+	var config Config
+	if err := yaml.UnmarshalStrict(yamlConf, &config); err != nil {
+		return config, fmt.Errorf("failed parsing YAML: %w", err)
+	}
+	return validateConfig(config)
 }
 
 type FunctionLocation struct {
@@ -405,21 +412,21 @@ Coverage:
 					continue
 				}
 			}
-			debugInfo = append(debugInfo, fmt.Sprintf("  - Matching rule: %v\n", rule))
+			debugInfo = append(debugInfo, fmt.Sprintf("  - Matching rule: %v", rule))
 			if cov.Coverage < rule.Coverage {
-				debugInfo = append(debugInfo, fmt.Sprintf("  - actual coverage %.1f%% < required coverage %.1f%%\n", cov.Coverage, rule.Coverage))
+				debugInfo = append(debugInfo, fmt.Sprintf("  - actual coverage %.1f%% < required coverage %.1f%%", cov.Coverage, rule.Coverage))
 				errors = append(errors, fmt.Sprintf("%v: actual coverage %.1f%% < required coverage %.1f%%: matching rule is `%v`", cov, cov.Coverage, rule.Coverage, rule))
 			} else {
-				debugInfo = append(debugInfo, fmt.Sprintf("  - actual coverage %.1f%% >= required coverage %.1f%%\n", cov.Coverage, rule.Coverage))
+				debugInfo = append(debugInfo, fmt.Sprintf("  - actual coverage %.1f%% >= required coverage %.1f%%", cov.Coverage, rule.Coverage))
 			}
 			continue Coverage
 		}
 
 		if cov.Coverage < config.DefaultCoverage {
-			errors = append(errors, fmt.Sprintf("%v: coverage %.1f%% < %.1f%%: default coverage requirement %.1f%%", cov, cov.Coverage, config.DefaultCoverage, config.DefaultCoverage))
-			debugInfo = append(debugInfo, "  - Default coverage not satisfied")
+			errors = append(errors, fmt.Sprintf("%v: actual coverage %.1f%% < default coverage %.1f%%", cov, cov.Coverage, config.DefaultCoverage))
+			debugInfo = append(debugInfo, fmt.Sprintf("  - Default coverage %.1f%% not satisfied", config.DefaultCoverage))
 		} else {
-			debugInfo = append(debugInfo, "  - Default coverage satisfied")
+			debugInfo = append(debugInfo, fmt.Sprintf("  - Default coverage %.1f%% satisfied", config.DefaultCoverage))
 		}
 	}
 
