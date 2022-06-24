@@ -126,15 +126,12 @@ func TestGenerateConfig(t *testing.T) {
 	assert.Equal(t, expected, generated)
 }
 
-func TestParseYAMLConfigErrors(t *testing.T) {
+func TestValidateConfigErrors(t *testing.T) {
 	table := []struct {
+		// TODO: change input from string to Config.
 		input string
 		err   string
 	}{
-		{
-			err:   "failed parsing YAML",
-			input: "asdf",
-		},
 		{
 			err:   "default coverage (101.0) is outside the range 0-100",
 			input: "default_coverage: 101",
@@ -162,6 +159,58 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 							default_coverage: 99
 							rules:
 							- coverage: 1`,
+		},
+	}
+	for _, test := range table {
+		// This is ugly but it's the only way I've found to get reasonable
+		// indentation.
+		yml := strings.ReplaceAll(test.input, "\t", "")
+		yml = strings.ReplaceAll(yml, "!!", "  ")
+		_, err := parseYAMLConfig([]byte(yml))
+		if assert.Error(t, err, test.input) {
+			// Note: the error message seems mangled when it's printed here, but it's
+			// fine when printed for real.  I don't understand why and an hour of
+			// debugging has gotten me nowhere :(
+			assert.Contains(t, err.Error(), test.err, yml)
+		}
+	}
+}
+
+func TestValidateConfigSuccess(t *testing.T) {
+	config := Config{
+		Comment:         "successful test",
+		DefaultCoverage: 75.0,
+		Rules: []Rule{
+			{
+				Comment:       "successful rule",
+				FilenameRegex: "foo",
+				FunctionRegex: "bar",
+				ReceiverRegex: "baz",
+				Coverage:      7.0,
+			},
+		},
+	}
+	config, err := validateConfig(config)
+	assert.Nil(t, err)
+	assert.Equal(t, 75.0, config.DefaultCoverage)
+	assert.Equal(t, 1, len(config.Rules))
+	rule := config.Rules[0]
+	assert.Equal(t, "foo", rule.FilenameRegex)
+	assert.Equal(t, "bar", rule.FunctionRegex)
+	assert.Equal(t, "baz", rule.ReceiverRegex)
+	assert.NotNil(t, rule.compiledFilenameRegex)
+	assert.NotNil(t, rule.compiledFunctionRegex)
+	assert.NotNil(t, rule.compiledReceiverRegex)
+}
+
+func TestParseYAMLConfigErrors(t *testing.T) {
+	table := []struct {
+		input string
+		err   string
+	}{
+		{
+			err:   "failed parsing YAML",
+			input: "asdf",
 		},
 	}
 	for _, test := range table {

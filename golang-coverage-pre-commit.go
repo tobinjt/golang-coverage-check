@@ -226,7 +226,6 @@ func generateConfig(coverage []CoverageLine) Config {
 
 // validateConfig checks a config for correctness, including compiling every
 // regex and caching the result.
-// TODO: separate the tests for validateConfig and parseYAMLConfig.
 func validateConfig(config Config) (Config, error) {
 	if config.DefaultCoverage < 0 || config.DefaultCoverage > 100 {
 		return config, fmt.Errorf("default coverage (%.1f) is outside the range 0-100", config.DefaultCoverage)
