@@ -40,7 +40,7 @@ rules:
     function_regex: OrDie$
     receiver_regex: ""
     coverage: 100
-  - comment: "TODO: improve test coverage for parse_json.go"
+  - comment: Improve test coverage for parse_json.go?
     filename_regex: ^parse_json.go$
     function_regex: ""
     receiver_regex: ""
@@ -56,8 +56,8 @@ rules:
     receiver_regex: ^Url$
     coverage: 56
   - comment: String() everywhere else should have high coverage
-    filename_regex: ^String$
-    function_regex: ""
+    filename_regex: ""
+    function_regex: ^String$
     receiver_regex: ""
     coverage: 100
 ```

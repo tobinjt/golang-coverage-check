@@ -180,7 +180,7 @@ func makeExampleConfig() string {
 				Coverage:      100,
 			},
 			{
-				Comment:       "TO" + "DO: improve test coverage for parse_json.go",
+				Comment:       "Improve test coverage for parse_json.go?",
 				FilenameRegex: "^parse_json.go$",
 				Coverage:      73,
 			},
