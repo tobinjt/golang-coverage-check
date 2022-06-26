@@ -894,6 +894,15 @@ func TestRealMain(t *testing.T) {
 			},
 		},
 		{
+			desc:   "building function info map fails",
+			err:    "failed parsing code: open /does-not-exist: no such file or directory",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.dirToParse = "/does-not-exist"
+				return opts
+			},
+		},
+		{
 			desc:   "goCover fails",
 			err:    "forced error for goCover fails",
 			output: "",

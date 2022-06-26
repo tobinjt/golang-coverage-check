@@ -486,7 +486,7 @@ func realMain(options Options) (string, error) {
 
 	fInfoMap, err := makeFunctionInfoMap(options)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed parsing code: %w", err)
 	}
 
 	rawCoverage, err := goCover(options)
