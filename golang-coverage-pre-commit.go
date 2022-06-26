@@ -46,7 +46,7 @@ type Options struct {
 	// The file to read module metadata from, "go.mod" except when testing error
 	// handling.
 	goMod string
-	// The directory makeFunctionLocationMap() parses, "." except when testing error
+	// The directory makeFunctionInfoMap() parses, "." except when testing error
 	// handling.
 	dirToParse string
 	// Flags.
@@ -207,13 +207,13 @@ func makeExampleConfig() string {
 }
 
 // Generate a Config from coverage information; used by --generate_config.
-func generateConfig(coverage []CoverageLine, functionLocationMap FunctionLocationMap) Config {
+func generateConfig(coverage []CoverageLine, fInfoMap FunctionInfoMap) Config {
 	config := Config{
 		DefaultCoverage: 100,
 	}
 	for _, cov := range coverage {
 		key := functionLocationKey(cov.Filename, cov.LineNumber)
-		receiver := functionLocationMap[key].Receiver
+		receiver := fInfoMap[key].Receiver
 		config.Rules = append(config.Rules,
 			Rule{
 				Comment:       "Generated rule for " + cov.Function + ", found at " + cov.Filename + ":" + cov.LineNumber,
@@ -256,7 +256,7 @@ func parseYAMLConfig(yamlConf []byte) (Config, error) {
 	return validateConfig(config)
 }
 
-type FunctionLocation struct {
+type FunctionInfo struct {
 	// The filename the function is defined in.
 	Filename string
 	// The line number of the function definition.
@@ -267,20 +267,20 @@ type FunctionLocation struct {
 	Receiver string
 }
 
-type FunctionLocationMap map[string]FunctionLocation
+type FunctionInfoMap map[string]FunctionInfo
 
 func functionLocationKey(filename, lineNumber string) string {
 	return filename + ":" + lineNumber
 }
 
-func (fl FunctionLocation) key() string {
+func (fl FunctionInfo) key() string {
 	return fl.Filename + ":" + fl.LineNumber
 }
 
-// makeFunctionLocationMap parses the code in the current directory and
-// constructs a map from filename:linenumber to FunctionLocation.
-func makeFunctionLocationMap(opts Options) (FunctionLocationMap, error) {
-	fmap := make(FunctionLocationMap)
+// makeFunctionInfoMap parses the code in the current directory and
+// constructs a map from filename:linenumber to FunctionInfo.
+func makeFunctionInfoMap(opts Options) (FunctionInfoMap, error) {
+	fmap := make(FunctionInfoMap)
 	fset := token.NewFileSet()
 	packageMap, err := parser.ParseDir(fset, opts.dirToParse, nil, 0)
 	if err != nil {
@@ -291,7 +291,7 @@ func makeFunctionLocationMap(opts Options) (FunctionLocationMap, error) {
 			for _, decl := range file.Decls {
 				if function, ok := decl.(*ast.FuncDecl); ok {
 					pos := fset.Position(function.Pos())
-					fl := FunctionLocation{
+					fl := FunctionInfo{
 						Filename:   pos.Filename,
 						LineNumber: fmt.Sprintf("%d", pos.Line),
 						Function:   function.Name.Name,
@@ -398,7 +398,7 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 
 // checkCoverage checks that each function meets the required level of coverage,
 // returning debugging information and an error if appropriate.
-func checkCoverage(config Config, coverage []CoverageLine, functionLocationMap FunctionLocationMap) (string, error) {
+func checkCoverage(config Config, coverage []CoverageLine, fInfoMap FunctionInfoMap) (string, error) {
 	errors := []string{}
 	debugInfo := []string{"Debug info for coverage matching"}
 
@@ -414,7 +414,7 @@ Coverage:
 			}
 			if rule.ReceiverRegex != "" {
 				key := functionLocationKey(cov.Filename, cov.LineNumber)
-				receiver := functionLocationMap[key].Receiver
+				receiver := fInfoMap[key].Receiver
 				if !rule.compiledReceiverRegex.MatchString(receiver) {
 					continue
 				}
@@ -484,7 +484,7 @@ func realMain(options Options) (string, error) {
 		return "", fmt.Errorf("failed parsing config %v: %w", options.configFile, err)
 	}
 
-	functionLocationMap, err := makeFunctionLocationMap(options)
+	fInfoMap, err := makeFunctionInfoMap(options)
 	if err != nil {
 		return "", err
 	}
@@ -499,11 +499,11 @@ func realMain(options Options) (string, error) {
 	}
 
 	if options.generateConfig {
-		newConfig := generateConfig(parsedCoverage, functionLocationMap)
+		newConfig := generateConfig(parsedCoverage, fInfoMap)
 		return newConfig.String(), nil
 	}
 
-	debugInfo, err := checkCoverage(config, parsedCoverage, functionLocationMap)
+	debugInfo, err := checkCoverage(config, parsedCoverage, fInfoMap)
 	if options.debugMatching {
 		return debugInfo, err
 	}

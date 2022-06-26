@@ -98,7 +98,7 @@ func TestGenerateConfig(t *testing.T) {
 		},
 	}
 
-	flm := FunctionLocationMap{
+	flm := FunctionInfoMap{
 		"test.go:9": {
 			Filename:   "test.go",
 			LineNumber: "9",
@@ -267,25 +267,25 @@ rules:
 	assert.Equal(t, "pinky", config.Rules[0].FunctionRegex)
 }
 
-func TestMakeFunctionLocationMapFailure(t *testing.T) {
+func TestMakeFunctionInfoMapFailure(t *testing.T) {
 	options := newTestOptions()
 	options.dirToParse = "does-not-exist"
-	_, err := makeFunctionLocationMap(options)
+	_, err := makeFunctionInfoMap(options)
 	assert.Error(t, err)
 }
 
-func TestMakeFunctionLocationMapSuccess(t *testing.T) {
-	fmap, err := makeFunctionLocationMap(newTestOptions())
+func TestMakeFunctionInfoMapSuccess(t *testing.T) {
+	fmap, err := makeFunctionInfoMap(newTestOptions())
 	assert.Nil(t, err)
-	fls := []FunctionLocation{
+	fls := []FunctionInfo{
 		{
-			Filename:   "functions-for-testing-makeFunctionLocationMap.go",
+			Filename:   "functions-for-testing-makeFunctionInfoMap.go",
 			LineNumber: "20",
 			Function:   "functionAtLine20",
 			Receiver:   "",
 		},
 		{
-			Filename:   "functions-for-testing-makeFunctionLocationMap.go",
+			Filename:   "functions-for-testing-makeFunctionInfoMap.go",
 			LineNumber: "26",
 			Function:   "String",
 			Receiver:   "methodReceiver",
@@ -299,10 +299,10 @@ func TestMakeFunctionLocationMapSuccess(t *testing.T) {
 	}
 }
 
-func TestMakeFunctionLocationMapSupport(t *testing.T) {
-	assert.Equal(t, "This function is at line 20 to test makeFunctionLocationMap()", functionAtLine20())
+func TestMakeFunctionInfoMapSupport(t *testing.T) {
+	assert.Equal(t, "This function is at line 20 to test makeFunctionInfoMap()", functionAtLine20())
 	mr := methodReceiver{}
-	assert.Equal(t, "This method has a methodReceiver receiver to test makeFunctionLocationMap()", mr.String())
+	assert.Equal(t, "This method has a methodReceiver receiver to test makeFunctionInfoMap()", mr.String())
 }
 
 func TestCaptureOutput(t *testing.T) {
@@ -543,12 +543,12 @@ func stripComments(input []string) []string {
 
 func TestCheckCoverage(t *testing.T) {
 	tests := []struct {
-		desc                string
-		config              Config
-		functionLocationMap FunctionLocationMap
-		input               []string
-		errors              []string
-		debug               []string
+		desc     string
+		config   Config
+		fInfoMap FunctionInfoMap
+		input    []string
+		errors   []string
+		debug    []string
 	}{
 
 		{
@@ -645,7 +645,7 @@ func TestCheckCoverage(t *testing.T) {
 				"// Doesn't match, falls through to default.",
 				"main.go:1:	main	100.0%",
 			},
-			functionLocationMap: FunctionLocationMap{
+			fInfoMap: FunctionInfoMap{
 				"utils.go:1": {
 					Filename:   "utils.go",
 					LineNumber: "1",
@@ -705,7 +705,7 @@ func TestCheckCoverage(t *testing.T) {
 				"// Doesn't match, falls through to default.",
 				"main.go:1:	main	100.0%",
 			},
-			functionLocationMap: FunctionLocationMap{
+			fInfoMap: FunctionInfoMap{
 				"utils.go:1": {
 					Filename:   "utils.go",
 					LineNumber: "1",
@@ -789,7 +789,7 @@ func TestCheckCoverage(t *testing.T) {
 		config, err := validateConfig(test.config)
 		assert.Nil(t, err)
 
-		debug, err := checkCoverage(config, coverage, test.functionLocationMap)
+		debug, err := checkCoverage(config, coverage, test.fInfoMap)
 		if len(test.errors) == 0 {
 			assert.Nil(t, err)
 		} else {

@@ -13,16 +13,16 @@
 // limitations under the License.
 
 // These functions are not used by golang-coverage-pre-commit; they are used by
-// the tests for makeFunctionLocationMap().
+// the tests for makeFunctionInfoMap().
 
 package main
 
 func functionAtLine20() string {
-	return "This function is at line 20 to test makeFunctionLocationMap()"
+	return "This function is at line 20 to test makeFunctionInfoMap()"
 }
 
 type methodReceiver struct{}
 
 func (mr methodReceiver) String() string {
-	return "This method has a methodReceiver receiver to test makeFunctionLocationMap()"
+	return "This method has a methodReceiver receiver to test makeFunctionInfoMap()"
 }
