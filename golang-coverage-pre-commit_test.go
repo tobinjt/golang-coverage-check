@@ -140,50 +140,64 @@ func TestGenerateConfig(t *testing.T) {
 
 func TestValidateConfigErrors(t *testing.T) {
 	table := []struct {
-		// TODO: change input from string to Config.
-		input string
-		err   string
+		config Config
+		err    string
 	}{
 		{
-			err:   "default coverage (101.0) is outside the range 0-100",
-			input: "default_coverage: 101",
+			err: "default coverage (101.0) is outside the range 0-100",
+			config: Config{
+				DefaultCoverage: 101,
+			},
+		},
+		{
+			err: "default coverage (-1.0) is outside the range 0-100",
+			config: Config{
+				DefaultCoverage: -1,
+			},
 		},
 		{
 			err: "coverage (1234.0) is outside the range 0-100 in",
-			input: `
-							default_coverage: 99
-							rules:
-							- filename_regex: asdf
-							!!coverage: 1234
-						`,
+			config: Config{
+				DefaultCoverage: 99,
+				Rules: []Rule{
+					{
+						FilenameRegex: "asdf",
+						Coverage:      1234,
+					},
+				},
+			},
 		},
 		{
 			err: "coverage (-1.0) is outside the range 0-100 in",
-			input: `
-							default_coverage: 99
-							rules:
-							- filename_regex: asdf
-							!!coverage: -1`,
+			config: Config{
+				DefaultCoverage: 99,
+				Rules: []Rule{
+					{
+						FilenameRegex: "asdf",
+						Coverage:      -1,
+					},
+				},
+			},
 		},
 		{
 			err: "every regex is an empty string in rule",
-			input: `
-							default_coverage: 99
-							rules:
-							- coverage: 1`,
+			config: Config{
+				DefaultCoverage: 99,
+				Rules: []Rule{
+					{
+						Coverage: 1,
+					},
+				},
+			},
 		},
 	}
 	for _, test := range table {
-		// This is ugly but it's the only way I've found to get reasonable
-		// indentation.
-		yml := strings.ReplaceAll(test.input, "\t", "")
-		yml = strings.ReplaceAll(yml, "!!", "  ")
-		_, err := parseYAMLConfig([]byte(yml))
-		if assert.Error(t, err, test.input) {
+		_, err := validateConfig(test.config)
+		if assert.Error(t, err, test.config) {
 			// Note: the error message seems mangled when it's printed here, but it's
 			// fine when printed for real.  I don't understand why and an hour of
 			// debugging has gotten me nowhere :(
-			assert.Contains(t, err.Error(), test.err, yml)
+			assert.Contains(t, err.Error(), test.err, test.config)
 		}
 	}
 }
