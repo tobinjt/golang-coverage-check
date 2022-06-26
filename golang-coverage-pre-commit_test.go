@@ -848,6 +848,25 @@ func TestRealMain(t *testing.T) {
 			},
 		},
 		{
+			desc:   "unsupported flag",
+			err:    "flag provided but not defined: -bad-flag",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.rawArgs = []string{"--bad-flag"}
+				opts.flagOutput = new(bytes.Buffer)
+				return opts
+			},
+		},
+		{
+			desc:   "unexpected arguments",
+			err:    "unexpected arguments",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.rawArgs = []string{"asdf", "1234"}
+				return opts
+			},
+		},
+		{
 			desc:   "bad go.mod path",
 			err:    "failed reading go-mod-does-not-exist:",
 			output: "",
@@ -871,25 +890,6 @@ func TestRealMain(t *testing.T) {
 			output: "",
 			mod: func(opts Options) Options {
 				opts.configFile = "bad-config.yaml"
-				return opts
-			},
-		},
-		{
-			desc:   "unexpected arguments",
-			err:    "unexpected arguments",
-			output: "",
-			mod: func(opts Options) Options {
-				opts.rawArgs = []string{"asdf", "1234"}
-				return opts
-			},
-		},
-		{
-			desc:   "unsupported flag",
-			err:    "flag provided but not defined: -bad-flag",
-			output: "",
-			mod: func(opts Options) Options {
-				opts.rawArgs = []string{"--bad-flag"}
-				opts.flagOutput = new(bytes.Buffer)
 				return opts
 			},
 		},
