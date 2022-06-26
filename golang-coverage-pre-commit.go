@@ -207,18 +207,20 @@ func makeExampleConfig() string {
 }
 
 // Generate a Config from coverage information; used by --generate_config.
-func generateConfig(coverage []CoverageLine) Config {
+func generateConfig(coverage []CoverageLine, functionLocationMap map[string]FunctionLocation) Config {
 	config := Config{
 		DefaultCoverage: 100,
 	}
-	// TODO: support ReceiverRegex.
 	for _, cov := range coverage {
+		key := functionLocationKey(cov.Filename, cov.LineNumber)
+		receiver := functionLocationMap[key].Receiver
 		config.Rules = append(config.Rules,
 			Rule{
 				Comment:       "Generated rule for " + cov.Function + ", found at " + cov.Filename + ":" + cov.LineNumber,
 				Coverage:      cov.Coverage,
 				FunctionRegex: "^" + cov.Function + "$",
 				FilenameRegex: "^" + cov.Filename + "$",
+				ReceiverRegex: "^" + receiver + "$",
 			})
 	}
 	return config
@@ -263,6 +265,10 @@ type FunctionLocation struct {
 	Function string
 	// For functions: empty string.  For methods: the receiver class.
 	Receiver string
+}
+
+func functionLocationKey(filename, lineNumber string) string {
+	return filename + ":" + lineNumber
 }
 
 func (fl FunctionLocation) key() string {
@@ -405,7 +411,7 @@ Coverage:
 				continue
 			}
 			if rule.ReceiverRegex != "" {
-				key := cov.Filename + ":" + cov.LineNumber
+				key := functionLocationKey(cov.Filename, cov.LineNumber)
 				receiver := functionLocationMap[key].Receiver
 				if !rule.compiledReceiverRegex.MatchString(receiver) {
 					continue
@@ -491,7 +497,7 @@ func realMain(options Options) (string, error) {
 	}
 
 	if options.generateConfig {
-		newConfig := generateConfig(parsedCoverage)
+		newConfig := generateConfig(parsedCoverage, functionLocationMap)
 		return newConfig.String(), nil
 	}
 

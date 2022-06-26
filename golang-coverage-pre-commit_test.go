@@ -98,31 +98,43 @@ func TestGenerateConfig(t *testing.T) {
 		},
 	}
 
+	flm := map[string]FunctionLocation{
+		"test.go:9": {
+			Filename:   "test.go",
+			LineNumber: "9",
+			Function:   "func17",
+			Receiver:   "receiver-receiver-receiver",
+		},
+	}
+
 	expected := Config{
 		DefaultCoverage: 100.0,
 		Rules: []Rule{
 			{
 				FilenameRegex: "^test.go$",
 				FunctionRegex: "^func1$",
+				ReceiverRegex: "^$",
 				Comment:       "Generated rule for func1, found at test.go:1",
 				Coverage:      20.0,
 			},
 			{
 				FilenameRegex: "^test.go$",
 				FunctionRegex: "^func5$",
+				ReceiverRegex: "^$",
 				Comment:       "Generated rule for func5, found at test.go:2",
 				Coverage:      34.0,
 			},
 			{
 				FilenameRegex: "^test.go$",
 				FunctionRegex: "^func17$",
+				ReceiverRegex: "^receiver-receiver-receiver$",
 				Comment:       "Generated rule for func17, found at test.go:9",
 				Coverage:      12.3,
 			},
 		},
 	}
 
-	generated := generateConfig(coverage)
+	generated := generateConfig(coverage, flm)
 	assert.Equal(t, expected, generated)
 }
 
