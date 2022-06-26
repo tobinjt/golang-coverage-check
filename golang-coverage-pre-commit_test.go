@@ -98,7 +98,7 @@ func TestGenerateConfig(t *testing.T) {
 		},
 	}
 
-	flm := map[string]FunctionLocation{
+	flm := FunctionLocationMap{
 		"test.go:9": {
 			Filename:   "test.go",
 			LineNumber: "9",
@@ -545,7 +545,7 @@ func TestCheckCoverage(t *testing.T) {
 	tests := []struct {
 		desc                string
 		config              Config
-		functionLocationMap map[string]FunctionLocation
+		functionLocationMap FunctionLocationMap
 		input               []string
 		errors              []string
 		debug               []string
@@ -645,7 +645,7 @@ func TestCheckCoverage(t *testing.T) {
 				"// Doesn't match, falls through to default.",
 				"main.go:1:	main	100.0%",
 			},
-			functionLocationMap: map[string]FunctionLocation{
+			functionLocationMap: FunctionLocationMap{
 				"utils.go:1": {
 					Filename:   "utils.go",
 					LineNumber: "1",
@@ -705,7 +705,7 @@ func TestCheckCoverage(t *testing.T) {
 				"// Doesn't match, falls through to default.",
 				"main.go:1:	main	100.0%",
 			},
-			functionLocationMap: map[string]FunctionLocation{
+			functionLocationMap: FunctionLocationMap{
 				"utils.go:1": {
 					Filename:   "utils.go",
 					LineNumber: "1",

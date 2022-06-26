@@ -207,7 +207,7 @@ func makeExampleConfig() string {
 }
 
 // Generate a Config from coverage information; used by --generate_config.
-func generateConfig(coverage []CoverageLine, functionLocationMap map[string]FunctionLocation) Config {
+func generateConfig(coverage []CoverageLine, functionLocationMap FunctionLocationMap) Config {
 	config := Config{
 		DefaultCoverage: 100,
 	}
@@ -267,6 +267,8 @@ type FunctionLocation struct {
 	Receiver string
 }
 
+type FunctionLocationMap map[string]FunctionLocation
+
 func functionLocationKey(filename, lineNumber string) string {
 	return filename + ":" + lineNumber
 }
@@ -277,8 +279,8 @@ func (fl FunctionLocation) key() string {
 
 // makeFunctionLocationMap parses the code in the current directory and
 // constructs a map from filename:linenumber to FunctionLocation.
-func makeFunctionLocationMap(opts Options) (map[string]FunctionLocation, error) {
-	fmap := make(map[string]FunctionLocation)
+func makeFunctionLocationMap(opts Options) (FunctionLocationMap, error) {
+	fmap := make(FunctionLocationMap)
 	fset := token.NewFileSet()
 	packageMap, err := parser.ParseDir(fset, opts.dirToParse, nil, 0)
 	if err != nil {
@@ -396,7 +398,7 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 
 // checkCoverage checks that each function meets the required level of coverage,
 // returning debugging information and an error if appropriate.
-func checkCoverage(config Config, coverage []CoverageLine, functionLocationMap map[string]FunctionLocation) (string, error) {
+func checkCoverage(config Config, coverage []CoverageLine, functionLocationMap FunctionLocationMap) (string, error) {
 	errors := []string{}
 	debugInfo := []string{"Debug info for coverage matching"}
 
