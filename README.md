@@ -6,11 +6,25 @@ used via <https://pre-commit.com> or standalone by running
 
 ## Quick start
 
+### Bootstrapping a config
+
 You can easily bootstrap a config that requires high coverage for new code and
 the current coverage level for existing code to prevent a reduction in coverage.
 
 ```shell
 golang-coverage-pre-commit --generate_config > .golang-coverage-pre-commit.yaml
+```
+
+### Pre-commit hook
+
+Use the following stanza in `.pre-commit-config.yaml` to use this tool with
+<https://pre-commit.com>.
+
+```yaml
+- repo: https://github.com/tobinjt/golang-coverage-pre-commit.git
+  rev: v1.0
+  hooks:
+    - id: golang-coverage
 ```
 
 ## Configuration
@@ -108,15 +122,6 @@ independently evaluated:
 
 - If no rules matched, `default_coverage` is compared against the actual
   coverage, and an error printed if the actual coverage is not high enough.
-
-### Bootstrapping a config
-
-You can easily bootstrap a config that requires high coverage for new code and
-the current coverage level for existing code to prevent a reduction in coverage.
-
-```shell
-golang-coverage-pre-commit --generate_config > .golang-coverage-pre-commit.yaml
-```
 
 ## FAQ
 
