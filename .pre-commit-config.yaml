@@ -19,7 +19,6 @@ repos:
     rev: v4.4.0
     hooks:
       - id: check-merge-conflict
-      - id: check-symlinks
       - id: check-vcs-permalinks
       - id: end-of-file-fixer
       - id: trailing-whitespace
@@ -43,3 +42,7 @@ repos:
         types: [markdown]
         exclude: CODE_OF_CONDUCT.md
         entry: markdownlint
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+      - id: check-useless-excludes
