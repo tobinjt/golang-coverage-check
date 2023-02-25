@@ -113,12 +113,20 @@ independently evaluated:
 
   - If a `filename_regex` was provided the filename must match it; an empty or
     missing `filename_regex` is ignored. The line number and the module name
-    from `go.mod` are removed before matching. Note that `filename_regex` is a
+    from `go.mod` are removed before matching (e.g.
+    `github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:81`
+    becomes `golang-coverage-pre-commit.g0`). Note that `filename_regex` is a
     _regex_, not a _glob_.
   - If a `function_regex` was provided the function name must match it; an empty
     or missing `function_regex` is ignored.
-  - If both checks pass the required coverage is compared against the actual
+  - If a `receiver_regex` was provided the method receiver name must match it;
+    an empty or missing `receiver_regex` is ignored. You should not supply a
+    `receiver_regex` unless the function is a method with a method receiver,
+    otherwise the rule will not match.
+  - If all checks pass the required coverage is compared against the actual
     coverage, and an error printed if the actual coverage is not high enough.
+    The following rules will be skipped, allowing you to write more specific
+    rules first followed by more general rules later.
 
 - If no rules matched, `default_coverage` is compared against the actual
   coverage, and an error printed if the actual coverage is not high enough.
