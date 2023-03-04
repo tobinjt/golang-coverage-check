@@ -135,10 +135,11 @@ independently evaluated:
 
 **How can I tell which lines of code have not been tested?**
 
-Run `golang-coverage-pre-commit --browser` - it will open the coverage report in
-your browser. If you're developing remotely this will not work, but you can
-find the coverage report in `${TMPDIR}/cover<RANDOM>/coverage.html` so maybe you
-can copy it to your local machine and open it from there?
+Run `golang-coverage-pre-commit --coverage_html=browser` - it will open the
+coverage report in your browser. If you're developing remotely this will not
+work, but you can find the coverage report in
+`${TMPDIR}/cover<RANDOM>/coverage.html` so maybe you can copy it to your local
+machine and open it from there?
 
 **How can I debug rule matching?**
 

@@ -350,7 +350,7 @@ func TestGoCoverSuccess(t *testing.T) {
 		commandRun[key] = true
 		return fakeOutput[key], nil
 	}
-	actual, err := goCover(options)
+	actual, _, err := goCover(options)
 	assert.Nil(t, err)
 	assert.Equal(t, []string{"expected return value"}, actual)
 	assert.Equal(t, len(commandRun), 2)
@@ -367,7 +367,7 @@ func TestGoCoverBrowserFailure(t *testing.T) {
 	}
 	commandRun := map[string]bool{}
 	options := newTestOptions()
-	options.showCoverageInBrowser = true
+	options.htmlOutput = htmlOpenInBrowser
 	options.captureOutput = func(command string, args ...string) ([]string, error) {
 		// The random filename is always the last arg, so drop it.
 		parts := args[0 : len(args)-1]
@@ -376,7 +376,7 @@ func TestGoCoverBrowserFailure(t *testing.T) {
 		return fakeOutput[key], fakeErrors[key]
 	}
 
-	actual, err := goCover(options)
+	actual, _, err := goCover(options)
 	assert.Error(t, err)
 	assert.Equal(t, []string{}, actual)
 	assert.Equal(t, 2, len(commandRun), commandRun)
@@ -392,7 +392,7 @@ func TestGoCoverBrowser(t *testing.T) {
 	}
 	commandRun := map[string]bool{}
 	options := newTestOptions()
-	options.showCoverageInBrowser = true
+	options.htmlOutput = htmlOpenInBrowser
 	options.captureOutput = func(command string, args ...string) ([]string, error) {
 		// The random filename is always the last arg, so drop it.
 		parts := args[0 : len(args)-1]
@@ -401,7 +401,7 @@ func TestGoCoverBrowser(t *testing.T) {
 		return fakeOutput[key], nil
 	}
 
-	actual, err := goCover(options)
+	actual, _, err := goCover(options)
 	assert.Nil(t, err)
 	assert.Equal(t, []string{"expected return value"}, actual)
 	assert.Equal(t, 3, len(commandRun), commandRun)
@@ -415,7 +415,7 @@ func TestGoCoverCaptureFailure(t *testing.T) {
 	options.captureOutput = func(string, ...string) ([]string, error) {
 		return []string{"this should not be seen"}, errors.New("error for testing")
 	}
-	actual, err := goCover(options)
+	actual, _, err := goCover(options)
 	assert.Error(t, err)
 	assert.Equal(t, []string{}, actual)
 	assert.Contains(t, err.Error(), "error for testing")
@@ -426,10 +426,23 @@ func TestGoCoverCreateTempFailure(t *testing.T) {
 	options.createTemp = func(string, string) (*os.File, error) {
 		return nil, errors.New("error for testing")
 	}
-	actual, err := goCover(options)
+	actual, _, err := goCover(options)
 	assert.Error(t, err)
 	assert.Equal(t, []string{}, actual)
 	assert.Contains(t, err.Error(), "error for testing")
+}
+
+func TestGoCoverHTMLPathNotImplemented(t *testing.T) {
+	options := newTestOptions()
+	options.htmlOutput = htmlShowPath
+	options.captureOutput = func(command string, args ...string) ([]string, error) {
+		return []string{}, nil
+	}
+	actual, filename, err := goCover(options)
+	assert.Error(t, err)
+	assert.Equal(t, []string{}, actual)
+	assert.Equal(t, "", filename)
+	assert.Contains(t, err.Error(), "not yet implemented: \"path\"")
 }
 
 func validCoverageOutput() []string {
@@ -854,6 +867,15 @@ func TestRealMain(t *testing.T) {
 			mod: func(opts Options) Options {
 				opts.rawArgs = []string{"--bad-flag"}
 				opts.flagOutput = new(bytes.Buffer)
+				return opts
+			},
+		},
+		{
+			desc:   "bad argument to --coverage_html",
+			err:    "unrecognised option for flag --coverage_html: \"rejected\"; valid options are an empty string, \"browser\", or \"path\"",
+			output: "",
+			mod: func(opts Options) Options {
+				opts.rawArgs = []string{"--coverage_html", "rejected"}
 				return opts
 			},
 		},

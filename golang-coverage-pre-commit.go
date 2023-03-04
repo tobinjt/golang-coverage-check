@@ -31,6 +31,9 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const htmlOpenInBrowser = "browser"
+const htmlShowPath = "path"
+
 // Options contains all the flags and dependency-injected functions used in
 // this program.  It exists so that tests can easily replace flags and
 // functions to trigger failure handling.
@@ -49,6 +52,7 @@ type Options struct {
 	// The directory makeFunctionInfoMap() parses, "." except when testing error
 	// handling.
 	dirToParse string
+
 	// Flags.
 	// Set by --example_config; output an example config and exit.
 	outputExampleConfig bool
@@ -57,8 +61,10 @@ type Options struct {
 	// Set by --debug_matching; output debugging information about matching
 	// coverage lines to rules.
 	debugMatching bool
-	// Set by --browser; open coverage results in a browser.
-	showCoverageInBrowser bool
+	// Set by --html; if non-empty, generate HTML output, either opening a browser or
+	// outputting the path to the generated HTML.
+	htmlOutput string
+
 	// Other configuration/data that needs to be passed around.
 	// Module path extracted from go.mod.
 	modulePath string
@@ -323,26 +329,32 @@ func captureOutput(command string, args ...string) ([]string, error) {
 }
 
 // goCover runs the commands to generate coverage and returns that output.
-func goCover(options Options) ([]string, error) {
+func goCover(options Options) ([]string, string, error) {
 	file, err := options.createTemp("", "golang-coverage-pre-commit")
 	if err != nil {
-		return []string{}, err
+		return []string{}, "", err
 	}
 	defer os.Remove(file.Name())
 
 	_, err = options.captureOutput("go", "test", "--covermode", "set", "--coverprofile", file.Name())
 	if err != nil {
-		return []string{}, err
+		return []string{}, "", err
 	}
 
-	if options.showCoverageInBrowser {
+	if options.htmlOutput == htmlOpenInBrowser {
 		_, err = options.captureOutput("go", "tool", "cover", "--html", file.Name())
 		if err != nil {
-			return []string{}, err
+			return []string{}, "", err
 		}
 	}
 
-	return options.captureOutput("go", "tool", "cover", "--func", file.Name())
+	if options.htmlOutput == htmlShowPath {
+		// TODO: write a function to capture the path.
+		return []string{}, "", fmt.Errorf("not yet implemented: %q", htmlShowPath)
+	}
+
+	lines, err := options.captureOutput("go", "tool", "cover", "--func", file.Name())
+	return lines, "", err
 }
 
 // parseCoverageOutput parses all the coverage lines and turns each into a
@@ -451,8 +463,11 @@ func realMain(options Options) (string, error) {
 	flags.SetOutput(options.flagOutput)
 	flags.BoolVar(&options.outputExampleConfig, "example_config", false, "output an example config and exit")
 	flags.BoolVar(&options.generateConfig, "generate_config", false, "output a config that exactly matches current coverage and exit")
-	flags.BoolVar(&options.showCoverageInBrowser, "browser", false, "open coverage results in a browser")
 	flags.BoolVar(&options.debugMatching, "debug_matching", false, "output debugging information about matching coverage lines to rules")
+	flags.StringVar(&options.htmlOutput, "coverage_html", "",
+		fmt.Sprintf("if non-empty will generate HTML coverage.  Set to %q to open in a browser; set to %q to output the path to the HTML",
+			htmlOpenInBrowser, htmlShowPath))
+
 	if err := flags.Parse(options.rawArgs); err != nil {
 		return "", err
 	}
@@ -460,6 +475,10 @@ func realMain(options Options) (string, error) {
 
 	if len(options.parsedArgs) > 0 {
 		return "", fmt.Errorf("unexpected arguments: %v", options.parsedArgs)
+	}
+	if options.htmlOutput != "" && options.htmlOutput != htmlOpenInBrowser && options.htmlOutput != htmlShowPath {
+		return "", fmt.Errorf("unrecognised option for flag --coverage_html: %q; valid options are an empty string, %q, or %q",
+			options.htmlOutput, htmlOpenInBrowser, htmlShowPath)
 	}
 	if options.outputExampleConfig {
 		return makeExampleConfig(), nil
@@ -489,7 +508,7 @@ func realMain(options Options) (string, error) {
 		return "", fmt.Errorf("failed parsing code: %w", err)
 	}
 
-	rawCoverage, err := goCover(options)
+	rawCoverage, _, err := goCover(options)
 	if err != nil {
 		return "", err
 	}
