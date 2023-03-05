@@ -323,38 +323,38 @@ func captureOutput(command string, args ...string) ([]string, error) {
 	cmd := exec.Command(command, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return []string{}, fmt.Errorf("failed running `%s`: %w\n%s", cmd, err, output)
+		return nil, fmt.Errorf("failed running `%s`: %w\n%s", cmd, err, output)
 	}
 	return strings.Split(string(output), "\n"), nil
 }
 
 // goCover runs the commands to generate coverage and returns that output.
-func goCover(options Options) ([]string, string, error) {
+func goCover(options Options) ([]string, []string, error) {
 	file, err := options.createTemp("", "golang-coverage-pre-commit")
 	if err != nil {
-		return []string{}, "", err
+		return nil, nil, err
 	}
 	defer os.Remove(file.Name())
 
 	_, err = options.captureOutput("go", "test", "--covermode", "set", "--coverprofile", file.Name())
 	if err != nil {
-		return []string{}, "", err
+		return nil, nil, err
 	}
 
 	if options.htmlOutput == htmlOpenInBrowser {
 		_, err = options.captureOutput("go", "tool", "cover", "--html", file.Name())
 		if err != nil {
-			return []string{}, "", err
+			return nil, nil, err
 		}
 	}
 
 	if options.htmlOutput == htmlShowPath {
 		// TODO: write a function to capture the path.
-		return []string{}, "", fmt.Errorf("not yet implemented: %q", htmlShowPath)
+		return nil, nil, fmt.Errorf("not yet implemented: %q", htmlShowPath)
 	}
 
 	lines, err := options.captureOutput("go", "tool", "cover", "--func", file.Name())
-	return lines, "", err
+	return lines, nil, err
 }
 
 // parseCoverageOutput parses all the coverage lines and turns each into a
@@ -371,7 +371,7 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 		}
 		parts := lineSplitter.Split(output[i], -1)
 		if len(parts) != 3 {
-			return []CoverageLine{}, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
+			return nil, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
 		}
 		if parts[0] == "total:" {
 			continue
@@ -380,22 +380,22 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 
 		matches := percentageExtractor.FindStringSubmatch(rawPercentage)
 		if len(matches) == 0 {
-			return []CoverageLine{}, fmt.Errorf("could not extract percentage from \"%v\"", rawPercentage)
+			return nil, fmt.Errorf("could not extract percentage from \"%v\"", rawPercentage)
 		}
 		percentage, err := strconv.ParseFloat(matches[1], 64)
 		if err != nil {
-			return []CoverageLine{}, fmt.Errorf("failed parsing \"%v\" as a float: %w", rawPercentage, err)
+			return nil, fmt.Errorf("failed parsing \"%v\" as a float: %w", rawPercentage, err)
 		}
 		if percentage > 100 {
-			return []CoverageLine{}, fmt.Errorf("percentage (%v) > 100 in \"%v\"", percentage, rawPercentage)
+			return nil, fmt.Errorf("percentage (%v) > 100 in \"%v\"", percentage, rawPercentage)
 		}
 		if percentage < 0 {
-			return []CoverageLine{}, fmt.Errorf("percentage (%v) < 0 in \"%v\"", percentage, rawPercentage)
+			return nil, fmt.Errorf("percentage (%v) < 0 in \"%v\"", percentage, rawPercentage)
 		}
 
 		fileLineParts := strings.Split(rawFilename, ":")
 		if len(fileLineParts) != 3 {
-			return []CoverageLine{}, fmt.Errorf("expected `filename:linenumber:` in \"%v\"", rawFilename)
+			return nil, fmt.Errorf("expected `filename:linenumber:` in \"%v\"", rawFilename)
 		}
 
 		results = append(results, CoverageLine{

@@ -378,7 +378,7 @@ func TestGoCoverBrowserFailure(t *testing.T) {
 
 	actual, _, err := goCover(options)
 	assert.Error(t, err)
-	assert.Equal(t, []string{}, actual)
+	assert.Nil(t, actual)
 	assert.Equal(t, 2, len(commandRun), commandRun)
 	assert.True(t, commandRun["test --covermode set --coverprofile"], commandRun)
 	assert.True(t, commandRun["tool cover --html"], commandRun)
@@ -417,7 +417,7 @@ func TestGoCoverCaptureFailure(t *testing.T) {
 	}
 	actual, _, err := goCover(options)
 	assert.Error(t, err)
-	assert.Equal(t, []string{}, actual)
+	assert.Nil(t, actual)
 	assert.Contains(t, err.Error(), "error for testing")
 }
 
@@ -428,7 +428,7 @@ func TestGoCoverCreateTempFailure(t *testing.T) {
 	}
 	actual, _, err := goCover(options)
 	assert.Error(t, err)
-	assert.Equal(t, []string{}, actual)
+	assert.Nil(t, actual)
 	assert.Contains(t, err.Error(), "error for testing")
 }
 
@@ -440,8 +440,8 @@ func TestGoCoverHTMLPathNotImplemented(t *testing.T) {
 	}
 	actual, filename, err := goCover(options)
 	assert.Error(t, err)
-	assert.Equal(t, []string{}, actual)
-	assert.Equal(t, "", filename)
+	assert.Nil(t, actual)
+	assert.Nil(t, filename)
 	assert.Contains(t, err.Error(), "not yet implemented: \"path\"")
 }
 
