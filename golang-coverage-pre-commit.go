@@ -61,8 +61,8 @@ type Options struct {
 	// Set by --debug_matching; output debugging information about matching
 	// coverage lines to rules.
 	debugMatching bool
-	// Set by --html; if non-empty, generate HTML output, either opening a browser or
-	// outputting the path to the generated HTML.
+	// Set by --coverage_html; if non-empty, generate HTML output, either opening
+	// a browser or outputting the path to the generated HTML.
 	htmlOutput string
 
 	// Other configuration/data that needs to be passed around.
@@ -166,7 +166,8 @@ func (config Config) String() string {
 	return string(bytes)
 }
 
-// makeExampleConfig creates an example Config and returns the string representation.
+// makeExampleConfig creates an example Config and returns the string
+// representation in YAML format.
 func makeExampleConfig() string {
 	config := Config{
 		Comment: "Comment is not interpreted or used; it is provided as a " +
@@ -233,7 +234,7 @@ func generateConfig(coverage []CoverageLine, fInfoMap FunctionInfoMap) Config {
 }
 
 // validateConfig checks a config for correctness, including compiling every
-// regex and caching the result.
+// regex and caching the result.  Returns an updated config and an error.
 func validateConfig(config Config) (Config, error) {
 	if config.DefaultCoverage < 0 || config.DefaultCoverage > 100 {
 		return config, fmt.Errorf("default coverage (%.1f) is outside the range 0-100", config.DefaultCoverage)
@@ -253,7 +254,7 @@ func validateConfig(config Config) (Config, error) {
 }
 
 // parseYAMLConfig parses raw YAML into a Config, checks it for correctness, and
-// compiles every regex for speed.
+// compiles every regex for speed.  Returns a config and an error.
 func parseYAMLConfig(yamlConf []byte) (Config, error) {
 	var config Config
 	if err := yaml.UnmarshalStrict(yamlConf, &config); err != nil {
@@ -275,6 +276,8 @@ type FunctionInfo struct {
 
 type FunctionInfoMap map[string]FunctionInfo
 
+// functionLocationKey turns a filename and linenumber into a string key for
+// a FunctionInfoMap.
 func functionLocationKey(filename, lineNumber string) string {
 	return filename + ":" + lineNumber
 }
@@ -283,8 +286,9 @@ func (fl FunctionInfo) key() string {
 	return fl.Filename + ":" + fl.LineNumber
 }
 
-// makeFunctionInfoMap parses the code in the current directory and
-// constructs a map from filename:linenumber to FunctionInfo.
+// makeFunctionInfoMap parses the code in the current directory and constructs
+// a map from filename:linenumber to FunctionInfo, returning a FunctionInfoMap
+// and an error.
 func makeFunctionInfoMap(opts Options) (FunctionInfoMap, error) {
 	fmap := make(FunctionInfoMap)
 	fset := token.NewFileSet()
@@ -317,8 +321,8 @@ func makeFunctionInfoMap(opts Options) (FunctionInfoMap, error) {
 	return fmap, nil
 }
 
-// captureOutput runs a command and returns the output on success and an error
-// on failure.
+// captureOutput runs a command and returns the output on success (a slice of
+// strings) and an error on failure.
 func captureOutput(command string, args ...string) ([]string, error) {
 	cmd := exec.Command(command, args...)
 	output, err := cmd.CombinedOutput()
@@ -328,7 +332,13 @@ func captureOutput(command string, args ...string) ([]string, error) {
 	return strings.Split(string(output), "\n"), nil
 }
 
-// goCover runs the commands to generate coverage and returns that output.
+// func goCoverCapturePath(options Options) ()
+
+// goCover runs the commands to generate coverage.  It returns
+//   - a slice of strings containing the command's output
+//   - a slice of strings containing the path to the generated HTML if
+//     --coverage_html == htmlShowPath
+//   - an error if running any command failed.
 func goCover(options Options) ([]string, []string, error) {
 	file, err := options.createTemp("", "golang-coverage-pre-commit")
 	if err != nil {
@@ -358,7 +368,7 @@ func goCover(options Options) ([]string, []string, error) {
 }
 
 // parseCoverageOutput parses all the coverage lines and turns each into a
-// CoverageLine.
+// CoverageLine, returning a slice of CoverageLine and an error.
 func parseCoverageOutput(options Options, output []string) ([]CoverageLine, error) {
 	results := []CoverageLine{}
 	lineSplitter := regexp.MustCompile(`\t+`)
@@ -409,7 +419,8 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 }
 
 // checkCoverage checks that each function meets the required level of coverage,
-// returning debugging information and an error if appropriate.
+// returning a string containing debugging information and an error if
+// appropriate.
 func checkCoverage(config Config, coverage []CoverageLine, fInfoMap FunctionInfoMap) (string, error) {
 	errors := []string{}
 	debugInfo := []string{"Debug info for coverage matching"}
@@ -458,6 +469,9 @@ Coverage:
 	return debug, nil
 }
 
+// realMain contains all the high level logic for the application, but in a
+// testable function.  It takes Options created by newOptions(), returns a
+// string to be output and an error if anything failed.
 func realMain(options Options) (string, error) {
 	flags := flag.NewFlagSet("", flag.ContinueOnError)
 	flags.SetOutput(options.flagOutput)
@@ -529,6 +543,9 @@ func realMain(options Options) (string, error) {
 	return "", err
 }
 
+// runAndPrint takes Options and a function to run, runs the function, prints
+// the output string returned by the function, and if the function returns an
+// error prints the error and exits unsuccessfully.
 func runAndPrint(options Options, runMe func(options Options) (string, error)) {
 	output, err := runMe(options)
 	fmt.Fprint(options.stdout, output)
