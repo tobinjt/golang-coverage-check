@@ -41,7 +41,7 @@ type Options struct {
 	// Function pointers for dependency injection.
 	// Used by goCover to run binaries and capture their stdout.
 	captureOutput func(string, ...string) ([]string, error)
-	// Used to create a temporary flie.
+	// Used to create a temporary file.
 	createTemp func(string, string) (*os.File, error)
 	// Paths to read from.
 	// The config file to read.
@@ -168,7 +168,7 @@ func (config Config) String() string {
 
 // makeExampleConfig creates an example Config and returns the string
 // representation in YAML format.
-func makeExampleConfig() string {
+func makeExampleConfig() []string {
 	config := Config{
 		Comment: "Comment is not interpreted or used; it is provided as a " +
 			"structured way of adding comments to a config, so that automated " +
@@ -210,7 +210,7 @@ func makeExampleConfig() string {
 			},
 		},
 	}
-	return config.String()
+	return []string{config.String()}
 }
 
 // Generate a Config from coverage information; used by --generate_config.
@@ -421,7 +421,7 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 // checkCoverage checks that each function meets the required level of coverage,
 // returning a string containing debugging information and an error if
 // appropriate.
-func checkCoverage(config Config, coverage []CoverageLine, fInfoMap FunctionInfoMap) (string, error) {
+func checkCoverage(config Config, coverage []CoverageLine, fInfoMap FunctionInfoMap) ([]string, error) {
 	errors := []string{}
 	debugInfo := []string{"Debug info for coverage matching"}
 
@@ -460,47 +460,45 @@ Coverage:
 		}
 	}
 
-	// Ensure we have a trailing \n.
-	debugInfo = append(debugInfo, "")
-	debug := strings.Join(debugInfo, "\n")
 	if len(errors) > 0 {
-		return debug, fmt.Errorf("%s", strings.Join(errors, "\n"))
+		return debugInfo, fmt.Errorf("%s", strings.Join(errors, "\n"))
 	}
-	return debug, nil
+	return debugInfo, nil
 }
 
 // realMain contains all the high level logic for the application, but in a
 // testable function.  It takes Options created by newOptions(), returns a
-// string to be output and an error if anything failed.
-func realMain(options Options) (string, error) {
+// slice of strings to be output to stdout, a slice of strings to be output to
+// stderr, and an error if anything failed.
+func realMain(options Options) ([]string, []string, error) {
 	flags := flag.NewFlagSet("", flag.ContinueOnError)
 	flags.SetOutput(options.flagOutput)
-	flags.BoolVar(&options.outputExampleConfig, "example_config", false, "output an example config and exit")
-	flags.BoolVar(&options.generateConfig, "generate_config", false, "output a config that exactly matches current coverage and exit")
+	flags.BoolVar(&options.outputExampleConfig, "example_config", false, "output an example config and exit without checking coverage")
+	flags.BoolVar(&options.generateConfig, "generate_config", false, "output a config that exactly matches current coverage and exit without checking coverage")
 	flags.BoolVar(&options.debugMatching, "debug_matching", false, "output debugging information about matching coverage lines to rules")
 	flags.StringVar(&options.htmlOutput, "coverage_html", "",
-		fmt.Sprintf("if non-empty will generate HTML coverage.  Set to %q to open in a browser; set to %q to output the path to the HTML",
+		fmt.Sprintf("if non-empty will generate HTML coverage.  Set to %q to open in a browser; set to %q to output the path to the HTML; in both cases coverage will still be checked against the rules you've defined",
 			htmlOpenInBrowser, htmlShowPath))
 
 	if err := flags.Parse(options.rawArgs); err != nil {
-		return "", err
+		return nil, nil, err
 	}
 	options.parsedArgs = flags.Args()
 
 	if len(options.parsedArgs) > 0 {
-		return "", fmt.Errorf("unexpected arguments: %v", options.parsedArgs)
+		return nil, nil, fmt.Errorf("unexpected arguments: %v", options.parsedArgs)
 	}
 	if options.htmlOutput != "" && options.htmlOutput != htmlOpenInBrowser && options.htmlOutput != htmlShowPath {
-		return "", fmt.Errorf("unrecognised option for flag --coverage_html: %q; valid options are an empty string, %q, or %q",
+		return nil, nil, fmt.Errorf("unrecognised option for flag --coverage_html: %q; valid options are an empty string, %q, or %q",
 			options.htmlOutput, htmlOpenInBrowser, htmlShowPath)
 	}
 	if options.outputExampleConfig {
-		return makeExampleConfig(), nil
+		return makeExampleConfig(), nil, nil
 	}
 
 	modBytes, err := os.ReadFile(options.goMod)
 	if err != nil {
-		return "", fmt.Errorf("failed reading %v: %w", options.goMod, err)
+		return nil, nil, fmt.Errorf("failed reading %v: %w", options.goMod, err)
 	}
 	options.modulePath = modfile.ModulePath(modBytes) + "/"
 
@@ -510,49 +508,57 @@ func realMain(options Options) (string, error) {
 	}
 	configBytes, err := os.ReadFile(options.configFile)
 	if err != nil {
-		return "", fmt.Errorf("failed reading config %v: %w", options.configFile, err)
+		return nil, nil, fmt.Errorf("failed reading config %v: %w", options.configFile, err)
 	}
 	config, err := parseYAMLConfig(configBytes)
 	if err != nil {
-		return "", fmt.Errorf("failed parsing config %v: %w", options.configFile, err)
+		return nil, nil, fmt.Errorf("failed parsing config %v: %w", options.configFile, err)
 	}
 
 	fInfoMap, err := makeFunctionInfoMap(options)
 	if err != nil {
-		return "", fmt.Errorf("failed parsing code: %w", err)
+		return nil, nil, fmt.Errorf("failed parsing code: %w", err)
 	}
 
 	rawCoverage, _, err := goCover(options)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 	parsedCoverage, err := parseCoverageOutput(options, rawCoverage)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	if options.generateConfig {
 		newConfig := generateConfig(parsedCoverage, fInfoMap)
-		return newConfig.String(), nil
+		return []string{newConfig.String()}, nil, nil
 	}
 
 	debugInfo, err := checkCoverage(config, parsedCoverage, fInfoMap)
 	if options.debugMatching {
-		return debugInfo, err
+		return debugInfo, nil, err
 	}
-	return "", err
+	return nil, nil, err
 }
 
 // runAndPrint takes Options and a function to run, runs the function, prints
 // the output string returned by the function, and if the function returns an
 // error prints the error and exits unsuccessfully.
-func runAndPrint(options Options, runMe func(options Options) (string, error)) {
-	output, err := runMe(options)
-	fmt.Fprint(options.stdout, output)
+func runAndPrint(options Options, runMe func(options Options) ([]string, []string, error)) {
+	stdout, stderr, err := runMe(options)
+	exitStatus := 0
+	if len(stdout) > 0 {
+		fmt.Fprint(options.stdout, strings.Join(stdout, "\n"))
+	}
+	if len(stderr) > 0 {
+		fmt.Fprint(options.stderr, strings.Join(stderr, "\n"))
+		exitStatus = 1
+	}
 	if err != nil {
 		fmt.Fprintf(options.stderr, "%v: %v\n", options.programName, err)
-		options.exit(1)
+		exitStatus = 1
 	}
+	options.exit(exitStatus)
 }
 
 func main() {

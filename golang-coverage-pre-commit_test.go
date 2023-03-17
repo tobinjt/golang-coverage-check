@@ -72,7 +72,7 @@ rules:
 	receiver_regex: ""
 	coverage: 100
 `, "\t", "  "), "\n"), "\n")
-	actual := strings.Split(makeExampleConfig(), "\n")
+	actual := strings.Split(makeExampleConfig()[0], "\n")
 	assert.Equal(t, expected, actual)
 }
 
@@ -826,8 +826,9 @@ func TestCheckCoverage(t *testing.T) {
 				}
 			}
 		}
+		debugStr := strings.Join(debug, "\n")
 		for i := range test.debug {
-			assert.Contains(t, debug, test.debug[i], "debug: "+test.desc)
+			assert.Contains(t, debugStr, test.debug[i], "debug: "+test.desc)
 		}
 	}
 }
@@ -974,17 +975,18 @@ func TestRealMain(t *testing.T) {
 
 	for _, test := range table {
 		options := test.mod(newTestOptions())
-		output, err := realMain(options)
+		// TODO: check stderr.
+		stdout, _, err := realMain(options)
 		if len(test.err) == 0 {
-			assert.Nil(t, err, "error check for "+test.desc)
+			assert.Nil(t, err, "err is nil check for "+test.desc)
 		} else {
-			assert.Error(t, err, "error check for "+test.desc)
-			assert.Contains(t, err.Error(), test.err, "error check for "+test.desc)
+			assert.Error(t, err, "err is error check for "+test.desc)
+			assert.Contains(t, err.Error(), test.err, "err contents check for "+test.desc)
 		}
 		if len(test.output) > 0 {
-			assert.Contains(t, output, test.output, "output check for "+test.desc)
+			assert.Contains(t, strings.Join(stdout, "\n"), test.output, "stdout contents check for "+test.desc)
 		} else {
-			assert.Equal(t, "", output, "output check for "+test.desc)
+			assert.Nil(t, stdout, "stdout is nil check for "+test.desc)
 		}
 	}
 }
@@ -996,10 +998,16 @@ func TestRunAndPrintSuccess(t *testing.T) {
 	stderr := new(bytes.Buffer)
 	options.stderr = stderr
 
-	runMe := func(options Options) (string, error) {
-		return "this is going to stdout", nil
+	exitCalledWith := 1
+	options.exit = func(status int) {
+		exitCalledWith = status
+	}
+
+	runMe := func(options Options) ([]string, []string, error) {
+		return []string{"this is going to stdout"}, nil, nil
 	}
 	runAndPrint(options, runMe)
+	assert.Equal(t, 0, exitCalledWith)
 	assert.Empty(t, stderr.String())
 	assert.Contains(t, stdout.String(), "this is going to stdout")
 }
@@ -1011,16 +1019,16 @@ func TestRunAndPrintErrors(t *testing.T) {
 	stderr := new(bytes.Buffer)
 	options.stderr = stderr
 
-	exitCalled := false
-	options.exit = func(_ int) {
-		exitCalled = true
+	exitCalledWith := 0
+	options.exit = func(status int) {
+		exitCalledWith = status
 	}
 
-	runMe := func(options Options) (string, error) {
-		return "this is going to stdout", fmt.Errorf("this is going to stderr")
+	runMe := func(options Options) ([]string, []string, error) {
+		return []string{"this is going to stdout"}, nil, fmt.Errorf("this is going to stderr")
 	}
 	runAndPrint(options, runMe)
-	assert.True(t, exitCalled)
+	assert.Equal(t, 1, exitCalledWith)
 	assert.Contains(t, stderr.String(), "this is going to stderr")
 	assert.Contains(t, stdout.String(), "this is going to stdout")
 }
