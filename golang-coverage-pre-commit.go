@@ -466,6 +466,29 @@ Coverage:
 	return debugInfo, nil
 }
 
+func validateFlags(options Options) error {
+	if len(options.parsedArgs) > 0 {
+		return fmt.Errorf("unexpected arguments: %v", options.parsedArgs)
+	}
+	if options.htmlOutput != "" && options.htmlOutput != htmlOpenInBrowser && options.htmlOutput != htmlShowPath {
+		return fmt.Errorf("unrecognised option for flag --coverage_html: %q; valid options are an empty string, %q, or %q",
+			options.htmlOutput, htmlOpenInBrowser, htmlShowPath)
+	}
+
+	enabled := []bool{options.outputExampleConfig, options.generateConfig, options.debugMatching}
+	enabled = append(enabled, options.htmlOutput == htmlShowPath)
+	count := 0
+	for _, e := range enabled {
+		if e {
+			count++
+		}
+	}
+	if count > 1 {
+		return fmt.Errorf("only one of --example_config, --generate_config, --debug_matching, --coverage_html=%s can be used because they all output to stdout and their output will be mixed up if more than one is used", htmlShowPath)
+	}
+	return nil
+}
+
 // realMain contains all the high level logic for the application, but in a
 // testable function.  It takes Options created by newOptions(), returns a
 // slice of strings to be output to stdout, a slice of strings to be output to
@@ -485,13 +508,10 @@ func realMain(options Options) ([]string, []string, error) {
 	}
 	options.parsedArgs = flags.Args()
 
-	if len(options.parsedArgs) > 0 {
-		return nil, nil, fmt.Errorf("unexpected arguments: %v", options.parsedArgs)
+	if err := validateFlags(options); err != nil {
+		return nil, nil, err
 	}
-	if options.htmlOutput != "" && options.htmlOutput != htmlOpenInBrowser && options.htmlOutput != htmlShowPath {
-		return nil, nil, fmt.Errorf("unrecognised option for flag --coverage_html: %q; valid options are an empty string, %q, or %q",
-			options.htmlOutput, htmlOpenInBrowser, htmlShowPath)
-	}
+
 	if options.outputExampleConfig {
 		return makeExampleConfig(), nil, nil
 	}

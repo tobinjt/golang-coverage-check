@@ -833,6 +833,59 @@ func TestCheckCoverage(t *testing.T) {
 	}
 }
 
+func TestValidateFlags(t *testing.T) {
+	table := []struct {
+		desc string
+		err  string
+		mod  func(opts Options) Options
+	}{
+		{
+			desc: "good arguments",
+			err:  "",
+			mod: func(opts Options) Options {
+				return opts
+			},
+		},
+		{
+			desc: "bad argument to --coverage_html",
+			err:  "unrecognised option for flag --coverage_html: \"rejected\"; valid options are an empty string, \"browser\", or \"path\"",
+			mod: func(opts Options) Options {
+				opts.htmlOutput = "rejected"
+				return opts
+			},
+		},
+		{
+			desc: "unexpected arguments",
+			err:  "unexpected arguments",
+			mod: func(opts Options) Options {
+				opts.parsedArgs = []string{"asdf", "1234"}
+				return opts
+			},
+		},
+		{
+			desc: "enabling multiple boolean flags",
+			err:  "only one of --example_config, --generate_config",
+			mod: func(opts Options) Options {
+				opts.outputExampleConfig = true
+				opts.htmlOutput = htmlShowPath
+				opts.debugMatching = true
+				return opts
+			},
+		},
+	}
+
+	for _, test := range table {
+		options := test.mod(newTestOptions())
+		err := validateFlags(options)
+		if len(test.err) == 0 {
+			assert.Nil(t, err, "err is nil check for "+test.desc)
+		} else {
+			assert.Error(t, err, "err is error check for "+test.desc)
+			assert.Contains(t, err.Error(), test.err, "err contents check for "+test.desc)
+		}
+	}
+}
+
 func TestRealMain(t *testing.T) {
 	table := []struct {
 		desc   string
@@ -868,15 +921,6 @@ func TestRealMain(t *testing.T) {
 			mod: func(opts Options) Options {
 				opts.rawArgs = []string{"--bad-flag"}
 				opts.flagOutput = new(bytes.Buffer)
-				return opts
-			},
-		},
-		{
-			desc:   "bad argument to --coverage_html",
-			err:    "unrecognised option for flag --coverage_html: \"rejected\"; valid options are an empty string, \"browser\", or \"path\"",
-			output: "",
-			mod: func(opts Options) Options {
-				opts.rawArgs = []string{"--coverage_html", "rejected"}
 				return opts
 			},
 		},
