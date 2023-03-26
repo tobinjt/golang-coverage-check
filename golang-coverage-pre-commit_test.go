@@ -21,6 +21,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -193,12 +194,10 @@ func TestValidateConfigErrors(t *testing.T) {
 	}
 	for _, test := range table {
 		_, err := validateConfig(test.config)
-		if assert.Error(t, err, test.config) {
-			// Note: the error message seems mangled when it's printed here, but it's
-			// fine when printed for real.  I don't understand why and an hour of
-			// debugging has gotten me nowhere :(
-			assert.Contains(t, err.Error(), test.err, test.config)
-		}
+		// Note: the error message seems mangled when it's printed here, but it's
+		// fine when printed for real.  I don't understand why and an hour of
+		// debugging has gotten me nowhere :(
+		assert.ErrorContains(t, err, test.err, test.config)
 	}
 }
 
@@ -245,12 +244,10 @@ func TestParseYAMLConfigErrors(t *testing.T) {
 		yml := strings.ReplaceAll(test.input, "\t", "")
 		yml = strings.ReplaceAll(yml, "!!", "  ")
 		_, err := parseYAMLConfig([]byte(yml))
-		if assert.Error(t, err, test.input) {
-			// Note: the error message seems mangled when it's printed here, but it's
-			// fine when printed for real.  I don't understand why and an hour of
-			// debugging has gotten me nowhere :(
-			assert.Contains(t, err.Error(), test.err, yml)
-		}
+		// Note: the error message seems mangled when it's printed here, but it's
+		// fine when printed for real.  I don't understand why and an hour of
+		// debugging has gotten me nowhere :(
+		assert.ErrorContains(t, err, test.err, yml)
 	}
 }
 
@@ -321,9 +318,8 @@ func TestMakeFunctionInfoMapSupport(t *testing.T) {
 
 func TestCaptureOutput(t *testing.T) {
 	output, err := captureOutput("cat", "/non-existent")
-	assert.Error(t, err)
 	assert.Empty(t, output)
-	assert.Contains(t, err.Error(), "cat: /non-existent: No such file or directory")
+	assert.ErrorContains(t, err, "cat: /non-existent: No such file or directory")
 
 	output, err = captureOutput("cat", "/etc/passwd")
 	assert.Nil(t, err)
@@ -334,6 +330,139 @@ func TestCaptureOutput(t *testing.T) {
 		}
 	}
 	assert.Len(t, rootLines, 1)
+}
+
+func TestReadLineWithRetry_Success(t *testing.T) {
+	file, err := os.Open("go.mod")
+	assert.Nil(t, err)
+	line, err := readLineWithRetry(file)
+	assert.Nil(t, err)
+	assert.Equal(t, "module github.com/tobinjt/golang-coverage-pre-commit\n", line)
+}
+
+func TestReadLineWithRetry_EOF(t *testing.T) {
+	file, err := os.CreateTemp("", "TestReadLineWithRetry_EOF.*")
+	assert.Nil(t, err)
+	strCh := make(chan string)
+	errCh := make(chan error)
+	runMe := func() {
+		line, err := readLineWithRetry(file)
+		strCh <- line
+		errCh <- err
+	}
+	go runMe()
+
+	time.Sleep(5 * sleepTime)
+	length, err := file.WriteString("written to temp file\n")
+	assert.Nil(t, err)
+	assert.Greater(t, length, 10)
+	// Sync and seek back to the start so that the read in the other goroutine
+	// can complete.
+	err = file.Sync()
+	assert.Nil(t, err)
+	offset, err := file.Seek(0, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, int64(0), offset)
+
+	line, err := <-strCh, <-errCh
+	assert.Nil(t, err)
+	assert.Equal(t, "written to temp file\n", line)
+}
+
+func TestReadLineWithRetry_Error(t *testing.T) {
+	file, err := os.CreateTemp("", "TestReadLineWithRetry_EOF.*")
+	assert.Nil(t, err)
+	strCh := make(chan string)
+	errCh := make(chan error)
+	runMe := func() {
+		line, err := readLineWithRetry(file)
+		strCh <- line
+		errCh <- err
+	}
+	go runMe()
+	time.Sleep(2 * sleepTime)
+	file.Close()
+	line, err := <-strCh, <-errCh
+	assert.ErrorContains(t, err, "file already closed")
+	assert.Equal(t, "", line)
+}
+
+func TestGoCoverCapturePathSuccess(t *testing.T) {
+	options := newTestOptions()
+	options.captureOutput = captureOutput
+	coverageFile, err := options.createTemp("", "golang-coverage-pre-commit.*.coverage-data")
+	assert.Nil(t, err)
+	path, err := goCoverCapturePath(options, coverageFile.Name())
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(path))
+}
+
+func TestGoCoverCapturePath_CreateTempFailed(t *testing.T) {
+	options := newTestOptions()
+	options.createTemp = func(string, string) (*os.File, error) {
+		return nil, errors.New("createTemp failed")
+	}
+	path, err := goCoverCapturePath(options, "")
+	assert.Error(t, err)
+	assert.Nil(t, path)
+}
+
+func TestGoCoverCapturePath_CreateTempFailedSecondTime(t *testing.T) {
+	options := newTestOptions()
+	calledBefore := false
+	options.createTemp = func(dir, pattern string) (*os.File, error) {
+		if calledBefore {
+			return nil, errors.New("createTemp failed on second call")
+		}
+		calledBefore = true
+		return os.CreateTemp(dir, pattern)
+	}
+	path, err := goCoverCapturePath(options, "")
+	assert.Nil(t, path)
+	assert.ErrorContains(t, err, "createTemp failed on second call")
+}
+
+func TestGoCoverCapturePath_ReadingFileFailed(t *testing.T) {
+	options := newTestOptions()
+	options.captureOutput = func(command string, args ...string) ([]string, error) {
+		return nil, nil
+	}
+	options.readLineWithRetry = func(*os.File) (string, error) {
+		return "", errors.New("readLineWithRetry failed")
+	}
+	path, err := goCoverCapturePath(options, "")
+	assert.Nil(t, path)
+	assert.ErrorContains(t, err, "readLineWithRetry failed")
+}
+
+func TestGoCoverCapturePath_ChmodFailed(t *testing.T) {
+	options := newTestOptions()
+	options.chmod = func(*os.File, os.FileMode) error {
+		return errors.New("chmod failed")
+	}
+	path, err := goCoverCapturePath(options, "")
+	assert.Nil(t, path)
+	assert.ErrorContains(t, err, "chmod failed")
+}
+
+func TestGoCoverCapturePath_SetenvFailed(t *testing.T) {
+	options := newTestOptions()
+	options.setenv = func(string, string) error {
+		return errors.New("setenv failed")
+	}
+	path, err := goCoverCapturePath(options, "")
+	assert.Nil(t, path)
+	assert.ErrorContains(t, err, "setenv failed")
+}
+
+func TestGoCoverCapturePath_CaptureOutputFailed(t *testing.T) {
+	options := newTestOptions()
+	options.captureOutput = func(command string, args ...string) ([]string, error) {
+		return nil, errors.New("captureOutput failed")
+	}
+	path, err := goCoverCapturePath(options, "")
+	assert.Nil(t, path)
+	assert.ErrorContains(t, err, "captureOutput failed")
 }
 
 func TestGoCoverSuccess(t *testing.T) {
@@ -410,15 +539,58 @@ func TestGoCoverBrowser(t *testing.T) {
 	assert.True(t, commandRun["tool cover --html"], commandRun)
 }
 
+func TestGoCoverPathFailure(t *testing.T) {
+	options := newTestOptions()
+	options.htmlOutput = htmlShowPath
+	options.captureOutput = func(command string, args ...string) ([]string, error) {
+		return nil, nil
+	}
+	options.readLineWithRetry = func(*os.File) (string, error) {
+		return "", errors.New("readLineWithRetry failed")
+	}
+
+	_, path, err := goCover(options)
+	assert.ErrorContains(t, err, "readLineWithRetry failed")
+	assert.Nil(t, path)
+}
+
+func TestGoCoverPath(t *testing.T) {
+	fakeOutput := map[string][]string{
+		"test --covermode set --coverprofile": {"ignored"},
+		"tool cover --func":                   {"expected return value"},
+		"tool cover --html":                   {"ignored"},
+	}
+	commandRun := map[string]bool{}
+	options := newTestOptions()
+	options.htmlOutput = htmlShowPath
+	options.captureOutput = func(command string, args ...string) ([]string, error) {
+		// The random filename is always the last arg, so drop it.
+		parts := args[0 : len(args)-1]
+		key := strings.Join(parts, " ")
+		commandRun[key] = true
+		return fakeOutput[key], nil
+	}
+	options.readLineWithRetry = func(*os.File) (string, error) {
+		return "this is the fake path", nil
+	}
+
+	_, path, err := goCover(options)
+	assert.Nil(t, err)
+	assert.Equal(t, []string{"this is the fake path"}, path)
+	assert.Equal(t, 3, len(commandRun), commandRun)
+	assert.True(t, commandRun["test --covermode set --coverprofile"], commandRun)
+	assert.True(t, commandRun["tool cover --func"], commandRun)
+	assert.True(t, commandRun["tool cover --html"], commandRun)
+}
+
 func TestGoCoverCaptureFailure(t *testing.T) {
 	options := newTestOptions()
 	options.captureOutput = func(string, ...string) ([]string, error) {
 		return []string{"this should not be seen"}, errors.New("error for testing")
 	}
 	actual, _, err := goCover(options)
-	assert.Error(t, err)
 	assert.Nil(t, actual)
-	assert.Contains(t, err.Error(), "error for testing")
+	assert.ErrorContains(t, err, "error for testing")
 }
 
 func TestGoCoverCreateTempFailure(t *testing.T) {
@@ -427,22 +599,8 @@ func TestGoCoverCreateTempFailure(t *testing.T) {
 		return nil, errors.New("error for testing")
 	}
 	actual, _, err := goCover(options)
-	assert.Error(t, err)
 	assert.Nil(t, actual)
-	assert.Contains(t, err.Error(), "error for testing")
-}
-
-func TestGoCoverHTMLPathNotImplemented(t *testing.T) {
-	options := newTestOptions()
-	options.htmlOutput = htmlShowPath
-	options.captureOutput = func(command string, args ...string) ([]string, error) {
-		return []string{}, nil
-	}
-	actual, filename, err := goCover(options)
-	assert.Error(t, err)
-	assert.Nil(t, actual)
-	assert.Nil(t, filename)
-	assert.Contains(t, err.Error(), "not yet implemented: \"path\"")
+	assert.ErrorContains(t, err, "error for testing")
 }
 
 func validCoverageOutput() []string {
@@ -516,13 +674,11 @@ github.com/.../golang-coverage-pre-commit.go:140:	main			0.0%
 total:											(statements)		38.1%
 `
 	_, err := parseCoverageOutput(options, strings.Split(badInputLine, "\n"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "expected 3 parts, found 1")
+	assert.ErrorContains(t, err, "expected 3 parts, found 1")
 
 	badInputLine = `missing-line-number:		String			100.0%`
 	_, err = parseCoverageOutput(options, []string{badInputLine})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "expected `filename:linenumber:` in \"missing-line-number:\"")
+	assert.ErrorContains(t, err, "expected `filename:linenumber:` in \"missing-line-number:\"")
 
 	table := []struct {
 		input string
@@ -552,9 +708,7 @@ total:											(statements)		38.1%
 	for _, test := range table {
 		input := fmt.Sprintf("foo.go:26:		String			%s", test.input)
 		_, err := parseCoverageOutput(options, []string{input})
-		if assert.Error(t, err, test.input) {
-			assert.Contains(t, err.Error(), test.err)
-		}
+		assert.ErrorContains(t, err, test.err)
 	}
 }
 
@@ -820,10 +974,8 @@ func TestCheckCoverage(t *testing.T) {
 		if len(test.errors) == 0 {
 			assert.Nil(t, err)
 		} else {
-			if assert.Error(t, err) {
-				for i := range test.errors {
-					assert.Contains(t, err.Error(), test.errors[i], "err: "+test.desc)
-				}
+			for i := range test.errors {
+				assert.ErrorContains(t, err, test.errors[i], "err: "+test.desc)
 			}
 		}
 		debugStr := strings.Join(debug, "\n")
@@ -880,8 +1032,7 @@ func TestValidateFlags(t *testing.T) {
 		if len(test.err) == 0 {
 			assert.Nil(t, err, "err is nil check for "+test.desc)
 		} else {
-			assert.Error(t, err, "err is error check for "+test.desc)
-			assert.Contains(t, err.Error(), test.err, "err contents check for "+test.desc)
+			assert.ErrorContains(t, err, test.err, "err contents check for "+test.desc)
 		}
 	}
 }
@@ -1024,8 +1175,7 @@ func TestRealMain(t *testing.T) {
 		if len(test.err) == 0 {
 			assert.Nil(t, err, "err is nil check for "+test.desc)
 		} else {
-			assert.Error(t, err, "err is error check for "+test.desc)
-			assert.Contains(t, err.Error(), test.err, "err contents check for "+test.desc)
+			assert.ErrorContains(t, err, test.err, "err contents check for "+test.desc)
 		}
 		if len(test.output) > 0 {
 			assert.Contains(t, strings.Join(stdout, "\n"), test.output, "stdout contents check for "+test.desc)

@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"go/ast"
@@ -26,13 +27,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v2"
 )
 
+// Constants used with --coverage_html.
 const htmlOpenInBrowser = "browser"
 const htmlShowPath = "path"
+
+// Used when sleeping between reads.
+const sleepTime = 10 * time.Millisecond
 
 // Options contains all the flags and dependency-injected functions used in
 // this program.  It exists so that tests can easily replace flags and
@@ -41,8 +47,15 @@ type Options struct {
 	// Function pointers for dependency injection.
 	// Used by goCover to run binaries and capture their stdout.
 	captureOutput func(string, ...string) ([]string, error)
+	chmod         func(*os.File, os.FileMode) error
 	// Used to create a temporary file.
 	createTemp func(string, string) (*os.File, error)
+	// Called when exiting on error.
+	exit              func(int)
+	readLineWithRetry func(*os.File) (string, error)
+	// Used to set $BROWSER in goCoverCapturePath.
+	setenv func(string, string) error
+
 	// Paths to read from.
 	// The config file to read.
 	configFile string
@@ -79,8 +92,6 @@ type Options struct {
 	// Where to write output and error messages.
 	stdout io.Writer
 	stderr io.Writer
-	// Called when existing on error.
-	exit func(int)
 }
 
 // newOptions returns an Options struct with fields set to standard values.
@@ -92,17 +103,25 @@ func newOptions() Options {
 		}
 	}
 	return Options{
-		captureOutput: captureOutput,
-		createTemp:    os.CreateTemp,
-		configFile:    ".golang-coverage-pre-commit.yaml",
-		goMod:         "go.mod",
-		dirToParse:    ".",
-		programName:   os.Args[0],
-		rawArgs:       args,
-		stdout:        os.Stdout,
-		stderr:        os.Stderr,
-		exit:          os.Exit,
+		captureOutput:     captureOutput,
+		chmod:             chmod,
+		createTemp:        os.CreateTemp,
+		exit:              os.Exit,
+		readLineWithRetry: readLineWithRetry,
+		setenv:            os.Setenv,
+		configFile:        ".golang-coverage-pre-commit.yaml",
+		goMod:             "go.mod",
+		dirToParse:        ".",
+		programName:       os.Args[0],
+		rawArgs:           args,
+		stdout:            os.Stdout,
+		stderr:            os.Stderr,
 	}
+}
+
+// chmod is a wrapper around os.File.Chmod for easy testing.
+func chmod(file *os.File, mode os.FileMode) error {
+	return file.Chmod(mode)
 }
 
 // CoverageLine represents a single line of coverage output.
@@ -332,7 +351,62 @@ func captureOutput(command string, args ...string) ([]string, error) {
 	return strings.Split(string(output), "\n"), nil
 }
 
-// func goCoverCapturePath(options Options) ()
+// readLineWithRetry reads a single line from file, retrying on EOF and
+// returning all other errors.
+func readLineWithRetry(file *os.File) (string, error) {
+	reader := bufio.NewReader(file)
+	var line string
+	var err error
+	for {
+		line, err = reader.ReadString('\n')
+		if err == nil {
+			break
+		}
+		if err == io.EOF {
+			time.Sleep(sleepTime)
+		} else {
+			return "", err
+		}
+	}
+	return line, nil
+}
+
+// goCoverCapturePath sets $BROWSER so the path to the generated coverage is
+// captured and printed to the user.  Returns an array of strings (only one
+// element) and an error on failure.
+func goCoverCapturePath(options Options, coverageFile string) ([]string, error) {
+	outputFile, err := options.createTemp("", "golang-coverage-pre-commit.*.html-path")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(outputFile.Name())
+	shellScript, err := options.createTemp("", "golang-coverage-pre-commit.*.sh")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(shellScript.Name())
+
+	shellScriptContents := `#!/bin/sh
+
+echo "$@" > "%s"
+`
+	fmt.Fprintf(shellScript, shellScriptContents, outputFile.Name())
+	if err = options.chmod(shellScript, 0755); err != nil {
+		return nil, err
+	}
+	if err = options.setenv("BROWSER", shellScript.Name()); err != nil {
+		return nil, err
+	}
+	_, err = options.captureOutput("go", "tool", "cover", "--html", coverageFile)
+	if err != nil {
+		return nil, err
+	}
+	htmlFile, err := options.readLineWithRetry(outputFile)
+	if err != nil {
+		return nil, err
+	}
+	return []string{htmlFile}, nil
+}
 
 // goCover runs the commands to generate coverage.  It returns
 //   - a slice of strings containing the command's output
@@ -340,6 +414,7 @@ func captureOutput(command string, args ...string) ([]string, error) {
 //     --coverage_html == htmlShowPath
 //   - an error if running any command failed.
 func goCover(options Options) ([]string, []string, error) {
+	var htmlPath []string
 	file, err := options.createTemp("", "golang-coverage-pre-commit")
 	if err != nil {
 		return nil, nil, err
@@ -359,12 +434,15 @@ func goCover(options Options) ([]string, []string, error) {
 	}
 
 	if options.htmlOutput == htmlShowPath {
-		// TODO: write a function to capture the path.
-		return nil, nil, fmt.Errorf("not yet implemented: %q", htmlShowPath)
+		path, err := goCoverCapturePath(options, file.Name())
+		if err != nil {
+			return nil, nil, err
+		}
+		htmlPath = path
 	}
 
 	lines, err := options.captureOutput("go", "tool", "cover", "--func", file.Name())
-	return lines, nil, err
+	return lines, htmlPath, err
 }
 
 // parseCoverageOutput parses all the coverage lines and turns each into a
@@ -540,7 +618,7 @@ func realMain(options Options) ([]string, []string, error) {
 		return nil, nil, fmt.Errorf("failed parsing code: %w", err)
 	}
 
-	rawCoverage, _, err := goCover(options)
+	rawCoverage, htmlPath, err := goCover(options)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -558,7 +636,7 @@ func realMain(options Options) ([]string, []string, error) {
 	if options.debugMatching {
 		return debugInfo, nil, err
 	}
-	return nil, nil, err
+	return htmlPath, nil, err
 }
 
 // runAndPrint takes Options and a function to run, runs the function, prints
