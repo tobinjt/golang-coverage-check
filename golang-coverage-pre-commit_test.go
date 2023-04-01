@@ -1037,6 +1037,18 @@ func TestValidateFlags(t *testing.T) {
 	}
 }
 
+func TestSetupFlagsAndUsage(t *testing.T) {
+	options := newTestOptions()
+	buffer := new(bytes.Buffer)
+	options.flagOutput = buffer
+	flags := setupFlagsAndUsage(&options)
+	flags.Usage()
+	message := buffer.String()
+	assert.Contains(t, message,
+		"Only one of --example_config, --generate_config, --debug_matching")
+	assert.Contains(t, message, "set to \"path\" to output the path to the HTML")
+}
+
 func TestRealMain(t *testing.T) {
 	table := []struct {
 		desc   string

@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v2"
@@ -544,6 +545,14 @@ Coverage:
 	return debugInfo, nil
 }
 
+func multipleBooleanFlagsMessage() string {
+	return fmt.Sprintf(
+		`only one of --example_config, --generate_config, --debug_matching, or
+--coverage_html=%s can be used because they all output to stdout and their
+output would be mixed up if more than one is used`, htmlShowPath)
+}
+
+// validateFlags checks for conflicting flags and returns an error.
 func validateFlags(options Options) error {
 	if len(options.parsedArgs) > 0 {
 		return fmt.Errorf("unexpected arguments: %v", options.parsedArgs)
@@ -562,9 +571,38 @@ func validateFlags(options Options) error {
 		}
 	}
 	if count > 1 {
-		return fmt.Errorf("only one of --example_config, --generate_config, --debug_matching, --coverage_html=%s can be used because they all output to stdout and their output will be mixed up if more than one is used", htmlShowPath)
+		return fmt.Errorf("%s", multipleBooleanFlagsMessage())
 	}
 	return nil
+}
+
+// setupFlagsAndUsage sets up all flags and the usage message.
+func setupFlagsAndUsage(options *Options) *flag.FlagSet {
+	flags := flag.NewFlagSet("", flag.ContinueOnError)
+	flags.SetOutput(options.flagOutput)
+	flags.Usage = func() {
+		fmt.Fprintf(flags.Output(), "Usage of %s:\n", os.Args[0])
+		flags.PrintDefaults()
+		message := []rune(multipleBooleanFlagsMessage())
+		message[0] = unicode.ToUpper(message[0])
+		fmt.Fprintf(flags.Output(), "\n%s.\n\n", string(message))
+	}
+	flags.BoolVar(&options.outputExampleConfig, "example_config", false,
+		`Output an example config and exit without checking coverage`)
+	flags.BoolVar(&options.generateConfig, "generate_config", false,
+		`Output a config that exactly matches current coverage and exit
+without checking coverage`)
+	flags.BoolVar(&options.debugMatching, "debug_matching", false,
+		`Output debugging information about matching coverage lines to rules`)
+	flags.StringVar(&options.htmlOutput, "coverage_html", "",
+		fmt.Sprintf(
+			`If non-empty will generate HTML coverage:
+- set to %q to open in a browser
+- set to %q to output the path to the HTML
+In both cases coverage will still be checked against the rules
+you've defined.`,
+			htmlOpenInBrowser, htmlShowPath))
+	return flags
 }
 
 // realMain contains all the high level logic for the application, but in a
@@ -572,15 +610,7 @@ func validateFlags(options Options) error {
 // slice of strings to be output to stdout, a slice of strings to be output to
 // stderr, and an error if anything failed.
 func realMain(options Options) ([]string, []string, error) {
-	flags := flag.NewFlagSet("", flag.ContinueOnError)
-	flags.SetOutput(options.flagOutput)
-	flags.BoolVar(&options.outputExampleConfig, "example_config", false, "output an example config and exit without checking coverage")
-	flags.BoolVar(&options.generateConfig, "generate_config", false, "output a config that exactly matches current coverage and exit without checking coverage")
-	flags.BoolVar(&options.debugMatching, "debug_matching", false, "output debugging information about matching coverage lines to rules")
-	flags.StringVar(&options.htmlOutput, "coverage_html", "",
-		fmt.Sprintf("if non-empty will generate HTML coverage.  Set to %q to open in a browser; set to %q to output the path to the HTML; in both cases coverage will still be checked against the rules you've defined",
-			htmlOpenInBrowser, htmlShowPath))
-
+	flags := setupFlagsAndUsage(&options)
 	if err := flags.Parse(options.rawArgs); err != nil {
 		return nil, nil, err
 	}
