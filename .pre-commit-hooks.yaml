@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- id: golang-coverage
-  name: golang-coverage
+- id: golang-coverage-check
+  name: golang-coverage-check
   description: Check test coverage of Golang code is sufficiently high
   entry: golang-coverage-check
   types: [go]
