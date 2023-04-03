@@ -34,6 +34,10 @@ repos:
       - id: go-imports
       - id: go-unit-tests
       - id: go-vet
+  - repo: https://github.com/tobinjt/golang-coverage-pre-commit.git
+    rev: v1.0
+    hooks:
+      - id: golang-coverage
   - repo: local
     hooks:
       - id: markdownlint

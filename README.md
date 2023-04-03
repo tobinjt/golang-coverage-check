@@ -21,10 +21,11 @@ Use the following stanza in `.pre-commit-config.yaml` to use this tool with
 <https://pre-commit.com>.
 
 ```yaml
-- repo: https://github.com/tobinjt/golang-coverage-pre-commit.git
-  rev: v1.0
-  hooks:
-    - id: golang-coverage
+repos:
+  - repo: https://github.com/tobinjt/golang-coverage-pre-commit.git
+    rev: v1.0
+    hooks:
+      - id: golang-coverage
 ```
 
 ## Configuration
