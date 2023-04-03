@@ -48,17 +48,21 @@ type Options struct {
 	// Function pointers for dependency injection.
 	// Used by goCover to run binaries and capture their stdout.
 	captureOutput func(string, ...string) ([]string, error)
-	chmod         func(*os.File, os.FileMode) error
+	// Makes the shell script used by --coverage_html=path executable.
+	chmod func(*os.File, os.FileMode) error
 	// Used to create a temporary file.
 	createTemp func(string, string) (*os.File, error)
 	// Called when exiting on error.
-	exit              func(int)
+	exit func(int)
+	// Reads a line from the output file created by --coverage_html=path,
+	// retrying on EOF.
 	readLineWithRetry func(*os.File) (string, error)
 	// Used to set $BROWSER in goCoverCapturePath.
 	setenv func(string, string) error
 
 	// Paths to read from.
-	// The config file to read.
+	// The config file to read, .golang-coverage-pre-commit.yaml except when
+	// testing error handling.
 	configFile string
 	// The file to read module metadata from, "go.mod" except when testing error
 	// handling.
@@ -70,14 +74,15 @@ type Options struct {
 	// Flags.
 	// Set by --example_config; output an example config and exit.
 	outputExampleConfig bool
-	// Set by --generate_config; generate a config that exactly matches current coverage.
+	// Set by --generate_config; generate a config that exactly matches current
+	// coverage.
 	generateConfig bool
 	// Set by --debug_matching; output debugging information about matching
 	// coverage lines to rules.
 	debugMatching bool
 	// Set by --coverage_html; if non-empty, generate HTML output, either opening
 	// a browser or outputting the path to the generated HTML.
-	htmlOutput string
+	coverageHTML string
 
 	// Other configuration/data that needs to be passed around.
 	// Module path extracted from go.mod.
@@ -138,7 +143,8 @@ type CoverageLine struct {
 }
 
 func (coverage CoverageLine) String() string {
-	return fmt.Sprintf("%s:%s:\t%s\t%.1f%%", coverage.Filename, coverage.LineNumber, coverage.Function, coverage.Coverage)
+	return fmt.Sprintf("%s:%s:\t%s\t%.1f%%",
+		coverage.Filename, coverage.LineNumber, coverage.Function, coverage.Coverage)
 }
 
 // Rule represents a coverage rule.
@@ -296,12 +302,14 @@ type FunctionInfo struct {
 
 type FunctionInfoMap map[string]FunctionInfo
 
-// functionLocationKey turns a filename and linenumber into a string key for
-// a FunctionInfoMap.
+// functionLocationKey turns a filename and line number into a string key for
+// a FunctionInfoMap; it must return the same key as FunctionInfo.key().
 func functionLocationKey(filename, lineNumber string) string {
 	return filename + ":" + lineNumber
 }
 
+// key generates a string key for a FunctionInfoMap; it must return the same
+// key as functionLocationKey.
 func (fl FunctionInfo) key() string {
 	return fl.Filename + ":" + fl.LineNumber
 }
@@ -415,7 +423,6 @@ echo "$@" > "%s"
 //     --coverage_html == htmlShowPath
 //   - an error if running any command failed.
 func goCover(options Options) ([]string, []string, error) {
-	var htmlPath []string
 	file, err := options.createTemp("", "golang-coverage-pre-commit")
 	if err != nil {
 		return nil, nil, err
@@ -427,19 +434,19 @@ func goCover(options Options) ([]string, []string, error) {
 		return nil, nil, err
 	}
 
-	if options.htmlOutput == htmlOpenInBrowser {
+	if options.coverageHTML == htmlOpenInBrowser {
 		_, err = options.captureOutput("go", "tool", "cover", "--html", file.Name())
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
-	if options.htmlOutput == htmlShowPath {
-		path, err := goCoverCapturePath(options, file.Name())
+	var htmlPath []string
+	if options.coverageHTML == htmlShowPath {
+		htmlPath, err = goCoverCapturePath(options, file.Name())
 		if err != nil {
 			return nil, nil, err
 		}
-		htmlPath = path
 	}
 
 	lines, err := options.captureOutput("go", "tool", "cover", "--func", file.Name())
@@ -523,19 +530,31 @@ Coverage:
 			}
 			debugInfo = append(debugInfo, fmt.Sprintf("  - Matching rule: %v", rule))
 			if cov.Coverage < rule.Coverage {
-				debugInfo = append(debugInfo, fmt.Sprintf("  - actual coverage %.1f%% < required coverage %.1f%%", cov.Coverage, rule.Coverage))
-				errors = append(errors, fmt.Sprintf("%v: actual coverage %.1f%% < required coverage %.1f%%: matching rule is `%v`", cov, cov.Coverage, rule.Coverage, rule))
+				debugInfo = append(debugInfo,
+					fmt.Sprintf("  - actual coverage %.1f%% < required coverage %.1f%%",
+						cov.Coverage, rule.Coverage))
+				errors = append(errors,
+					fmt.Sprintf("%v: actual coverage %.1f%% < required coverage %.1f%%: matching rule is `%v`",
+						cov, cov.Coverage, rule.Coverage, rule))
 			} else {
-				debugInfo = append(debugInfo, fmt.Sprintf("  - actual coverage %.1f%% >= required coverage %.1f%%", cov.Coverage, rule.Coverage))
+				debugInfo = append(debugInfo,
+					fmt.Sprintf("  - actual coverage %.1f%% >= required coverage %.1f%%",
+						cov.Coverage, rule.Coverage))
 			}
 			continue Coverage
 		}
 
 		if cov.Coverage < config.DefaultCoverage {
-			errors = append(errors, fmt.Sprintf("%v: actual coverage %.1f%% < default coverage %.1f%%", cov, cov.Coverage, config.DefaultCoverage))
-			debugInfo = append(debugInfo, fmt.Sprintf("  - Default coverage %.1f%% not satisfied", config.DefaultCoverage))
+			errors = append(errors,
+				fmt.Sprintf("%v: actual coverage %.1f%% < default coverage %.1f%%",
+					cov, cov.Coverage, config.DefaultCoverage))
+			debugInfo = append(debugInfo,
+				fmt.Sprintf("  - Default coverage %.1f%% not satisfied",
+					config.DefaultCoverage))
 		} else {
-			debugInfo = append(debugInfo, fmt.Sprintf("  - Default coverage %.1f%% satisfied", config.DefaultCoverage))
+			debugInfo = append(debugInfo,
+				fmt.Sprintf("  - Default coverage %.1f%% satisfied",
+					config.DefaultCoverage))
 		}
 	}
 
@@ -545,6 +564,8 @@ Coverage:
 	return debugInfo, nil
 }
 
+// multipleBooleanFlagsMessage returns the message about accepting only one
+// boolean flag, because it's used in multiple places.
 func multipleBooleanFlagsMessage() string {
 	return fmt.Sprintf(
 		`only one of --example_config, --generate_config, --debug_matching, or
@@ -557,13 +578,15 @@ func validateFlags(options Options) error {
 	if len(options.parsedArgs) > 0 {
 		return fmt.Errorf("unexpected arguments: %v", options.parsedArgs)
 	}
-	if options.htmlOutput != "" && options.htmlOutput != htmlOpenInBrowser && options.htmlOutput != htmlShowPath {
+	if options.coverageHTML != "" &&
+		options.coverageHTML != htmlOpenInBrowser &&
+		options.coverageHTML != htmlShowPath {
 		return fmt.Errorf("unrecognised option for flag --coverage_html: %q; valid options are an empty string, %q, or %q",
-			options.htmlOutput, htmlOpenInBrowser, htmlShowPath)
+			options.coverageHTML, htmlOpenInBrowser, htmlShowPath)
 	}
 
 	enabled := []bool{options.outputExampleConfig, options.generateConfig, options.debugMatching}
-	enabled = append(enabled, options.htmlOutput == htmlShowPath)
+	enabled = append(enabled, options.coverageHTML == htmlShowPath)
 	count := 0
 	for _, e := range enabled {
 		if e {
@@ -581,12 +604,13 @@ func setupFlagsAndUsage(options *Options) *flag.FlagSet {
 	flags := flag.NewFlagSet("", flag.ContinueOnError)
 	flags.SetOutput(options.flagOutput)
 	flags.Usage = func() {
-		fmt.Fprintf(flags.Output(), "Usage of %s:\n", os.Args[0])
+		fmt.Fprintf(flags.Output(), "Usage of %s:\n", options.programName)
 		flags.PrintDefaults()
 		message := []rune(multipleBooleanFlagsMessage())
 		message[0] = unicode.ToUpper(message[0])
 		fmt.Fprintf(flags.Output(), "\n%s.\n\n", string(message))
 	}
+
 	flags.BoolVar(&options.outputExampleConfig, "example_config", false,
 		`Output an example config and exit without checking coverage`)
 	flags.BoolVar(&options.generateConfig, "generate_config", false,
@@ -594,14 +618,17 @@ func setupFlagsAndUsage(options *Options) *flag.FlagSet {
 without checking coverage`)
 	flags.BoolVar(&options.debugMatching, "debug_matching", false,
 		`Output debugging information about matching coverage lines to rules`)
-	flags.StringVar(&options.htmlOutput, "coverage_html", "",
+	flags.StringVar(&options.coverageHTML, "coverage_html", "",
 		fmt.Sprintf(
 			`If non-empty will generate HTML coverage:
 - set to %q to open in a browser
 - set to %q to output the path to the HTML
+
 In both cases coverage will still be checked against the rules
-you've defined.`,
-			htmlOpenInBrowser, htmlShowPath))
+you've defined.  Note that %q has only been tested on MacOS,
+and requires /bin/sh, so it definitely won't work on Windows.
+`,
+			htmlOpenInBrowser, htmlShowPath, htmlShowPath))
 	return flags
 }
 

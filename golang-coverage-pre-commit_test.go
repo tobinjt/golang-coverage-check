@@ -99,7 +99,7 @@ func TestGenerateConfig(t *testing.T) {
 		},
 	}
 
-	flm := FunctionInfoMap{
+	fim := FunctionInfoMap{
 		"test.go:9": {
 			Filename:   "test.go",
 			LineNumber: "9",
@@ -135,7 +135,7 @@ func TestGenerateConfig(t *testing.T) {
 		},
 	}
 
-	generated := generateConfig(coverage, flm)
+	generated := generateConfig(coverage, fim)
 	assert.Equal(t, expected, generated)
 }
 
@@ -228,27 +228,9 @@ func TestValidateConfigSuccess(t *testing.T) {
 	assert.NotNil(t, rule.compiledReceiverRegex)
 }
 
-func TestParseYAMLConfigErrors(t *testing.T) {
-	table := []struct {
-		input string
-		err   string
-	}{
-		{
-			err:   "failed parsing YAML",
-			input: "asdf",
-		},
-	}
-	for _, test := range table {
-		// This is ugly but it's the only way I've found to get reasonable
-		// indentation.
-		yml := strings.ReplaceAll(test.input, "\t", "")
-		yml = strings.ReplaceAll(yml, "!!", "  ")
-		_, err := parseYAMLConfig([]byte(yml))
-		// Note: the error message seems mangled when it's printed here, but it's
-		// fine when printed for real.  I don't understand why and an hour of
-		// debugging has gotten me nowhere :(
-		assert.ErrorContains(t, err, test.err, yml)
-	}
+func TestParseYAMLConfig_UnmarshalError(t *testing.T) {
+	_, err := parseYAMLConfig([]byte("asdf"))
+	assert.ErrorContains(t, err, "failed parsing YAML: yaml: unmarshal errors")
 }
 
 func TestParseYAMLConfigSuccess(t *testing.T) {
@@ -288,7 +270,7 @@ func TestMakeFunctionInfoMapFailure(t *testing.T) {
 func TestMakeFunctionInfoMapSuccess(t *testing.T) {
 	fmap, err := makeFunctionInfoMap(newTestOptions())
 	assert.Nil(t, err)
-	fls := []FunctionInfo{
+	fis := []FunctionInfo{
 		{
 			Filename:   "functions-for-testing-makeFunctionInfoMap.go",
 			LineNumber: "20",
@@ -302,15 +284,17 @@ func TestMakeFunctionInfoMapSuccess(t *testing.T) {
 			Receiver:   "methodReceiver",
 		},
 	}
-	for _, fl := range fls {
-		key := fl.key()
+	for _, fi := range fis {
+		key := fi.key()
 		if assert.Contains(t, fmap, key) {
-			assert.Equal(t, fl, fmap[key])
+			assert.Equal(t, fi, fmap[key])
 		}
 	}
 }
 
 func TestMakeFunctionInfoMapSupport(t *testing.T) {
+	// Test that the functions in functions-for-testing-makeFunctionInfoMap.go
+	// are correct so that other tests have known good data to work with.
 	assert.Equal(t, "This function is at line 20 to test makeFunctionInfoMap()", functionAtLine20())
 	mr := methodReceiver{}
 	assert.Equal(t, "This method has a methodReceiver receiver to test makeFunctionInfoMap()", mr.String())
@@ -318,7 +302,7 @@ func TestMakeFunctionInfoMapSupport(t *testing.T) {
 
 func TestCaptureOutput(t *testing.T) {
 	output, err := captureOutput("cat", "/non-existent")
-	assert.Empty(t, output)
+	assert.Nil(t, output)
 	assert.ErrorContains(t, err, "cat: /non-existent: No such file or directory")
 
 	output, err = captureOutput("cat", "/etc/passwd")
@@ -352,7 +336,7 @@ func TestReadLineWithRetry_EOF(t *testing.T) {
 	}
 	go runMe()
 
-	time.Sleep(5 * sleepTime)
+	time.Sleep(3 * sleepTime)
 	length, err := file.WriteString("written to temp file\n")
 	assert.Nil(t, err)
 	assert.Greater(t, length, 10)
@@ -370,7 +354,7 @@ func TestReadLineWithRetry_EOF(t *testing.T) {
 }
 
 func TestReadLineWithRetry_Error(t *testing.T) {
-	file, err := os.CreateTemp("", "TestReadLineWithRetry_EOF.*")
+	file, err := os.CreateTemp("", "TestReadLineWithRetry_Error.*")
 	assert.Nil(t, err)
 	strCh := make(chan string)
 	errCh := make(chan error)
@@ -380,7 +364,7 @@ func TestReadLineWithRetry_Error(t *testing.T) {
 		errCh <- err
 	}
 	go runMe()
-	time.Sleep(2 * sleepTime)
+	time.Sleep(3 * sleepTime)
 	file.Close()
 	line, err := <-strCh, <-errCh
 	assert.ErrorContains(t, err, "file already closed")
@@ -496,7 +480,7 @@ func TestGoCoverBrowserFailure(t *testing.T) {
 	}
 	commandRun := map[string]bool{}
 	options := newTestOptions()
-	options.htmlOutput = htmlOpenInBrowser
+	options.coverageHTML = htmlOpenInBrowser
 	options.captureOutput = func(command string, args ...string) ([]string, error) {
 		// The random filename is always the last arg, so drop it.
 		parts := args[0 : len(args)-1]
@@ -521,7 +505,7 @@ func TestGoCoverBrowser(t *testing.T) {
 	}
 	commandRun := map[string]bool{}
 	options := newTestOptions()
-	options.htmlOutput = htmlOpenInBrowser
+	options.coverageHTML = htmlOpenInBrowser
 	options.captureOutput = func(command string, args ...string) ([]string, error) {
 		// The random filename is always the last arg, so drop it.
 		parts := args[0 : len(args)-1]
@@ -541,7 +525,7 @@ func TestGoCoverBrowser(t *testing.T) {
 
 func TestGoCoverPathFailure(t *testing.T) {
 	options := newTestOptions()
-	options.htmlOutput = htmlShowPath
+	options.coverageHTML = htmlShowPath
 	options.captureOutput = func(command string, args ...string) ([]string, error) {
 		return nil, nil
 	}
@@ -562,7 +546,7 @@ func TestGoCoverPath(t *testing.T) {
 	}
 	commandRun := map[string]bool{}
 	options := newTestOptions()
-	options.htmlOutput = htmlShowPath
+	options.coverageHTML = htmlShowPath
 	options.captureOutput = func(command string, args ...string) ([]string, error) {
 		// The random filename is always the last arg, so drop it.
 		parts := args[0 : len(args)-1]
@@ -1002,7 +986,7 @@ func TestValidateFlags(t *testing.T) {
 			desc: "bad argument to --coverage_html",
 			err:  "unrecognised option for flag --coverage_html: \"rejected\"; valid options are an empty string, \"browser\", or \"path\"",
 			mod: func(opts Options) Options {
-				opts.htmlOutput = "rejected"
+				opts.coverageHTML = "rejected"
 				return opts
 			},
 		},
@@ -1019,7 +1003,7 @@ func TestValidateFlags(t *testing.T) {
 			err:  "only one of --example_config, --generate_config",
 			mod: func(opts Options) Options {
 				opts.outputExampleConfig = true
-				opts.htmlOutput = htmlShowPath
+				opts.coverageHTML = htmlShowPath
 				opts.debugMatching = true
 				return opts
 			},
@@ -1182,8 +1166,9 @@ func TestRealMain(t *testing.T) {
 
 	for _, test := range table {
 		options := test.mod(newTestOptions())
-		// TODO: check stderr.
-		stdout, _, err := realMain(options)
+		stdout, stderr, err := realMain(options)
+		// Currently nothing is sent directly to stderr, all errors go through err.
+		assert.Empty(t, stderr)
 		if len(test.err) == 0 {
 			assert.Nil(t, err, "err is nil check for "+test.desc)
 		} else {
@@ -1215,6 +1200,12 @@ func TestRunAndPrint(t *testing.T) {
 		{
 			desc: "there was an error",
 			err:  errors.New("error for testing"),
+		},
+		{
+			desc:   "all three",
+			stdout: []string{"written to stdout"},
+			stderr: []string{"written to stderr"},
+			err:    errors.New("also an error"),
 		},
 	}
 
