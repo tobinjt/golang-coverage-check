@@ -1,8 +1,8 @@
-# golang-coverage-pre-commit
+# golang-coverage-check
 
 A tool to check that Golang code has sufficient test coverage. This tool can be
 used via <https://pre-commit.com> or standalone by running
-`golang-coverage-pre-commit`.
+`golang-coverage-check`.
 
 ## Quick start
 
@@ -12,7 +12,7 @@ You can easily bootstrap a config that requires high coverage for new code and
 the current coverage level for existing code to prevent a reduction in coverage.
 
 ```shell
-golang-coverage-pre-commit --generate_config > .golang-coverage-pre-commit.yaml
+golang-coverage-check --generate_config > .golang-coverage-check.yaml
 ```
 
 ### Pre-commit hook
@@ -22,7 +22,7 @@ Use the following stanza in `.pre-commit-config.yaml` to use this tool with
 
 ```yaml
 repos:
-  - repo: https://github.com/tobinjt/golang-coverage-pre-commit.git
+  - repo: https://github.com/tobinjt/golang-coverage-check.git
     rev: v1.0
     hooks:
       - id: golang-coverage
@@ -30,10 +30,10 @@ repos:
 
 ## Configuration
 
-A YAML config file named `.golang-coverage-pre-commit.yaml` is **_required_**.
+A YAML config file named `.golang-coverage-check.yaml` is **_required_**.
 None of the fields are required inside the file; an empty config is equivalent
 to a config containing only `default_coverage: 0`. You can generate an example
-config (shown below) by running `golang-coverage-pre-commit --example_config`.
+config (shown below) by running `golang-coverage-check --example_config`.
 
 ### Example config
 
@@ -81,7 +81,7 @@ rules:
 
 **_Top-level fields_**
 
-- `comment`: unused by `golang-coverage-pre-commit`, it exists to support
+- `comment`: unused by `golang-coverage-check`, it exists to support
   structured comments that survive de-serialisation and re-serialisation, e.g.
   when combining config snippets.
 - `default_coverage`: this is the default required coverage level that is used
@@ -94,7 +94,7 @@ rules:
 Rules have the following fields; `coverage` is required, and at least one regex
 must be non-empty.
 
-- `comment`: unused by `golang-coverage-pre-commit`, it exists to support
+- `comment`: unused by `golang-coverage-check`, it exists to support
   structured comments that survive de-serialisation and re-serialisation, e.g.
   when combining config snippets.
 - `filename_regex`: the regular expression that the filename is matched against.
@@ -115,8 +115,8 @@ independently evaluated:
   - If a `filename_regex` is provided the filename must match it; an empty or
     missing `filename_regex` is ignored. The line number and the module name
     from `go.mod` are removed before matching (e.g.
-    `github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:81`
-    becomes `golang-coverage-pre-commit.go`). Note that `filename_regex` is a
+    `github.com/tobinjt/golang-coverage-check/golang-coverage-check.go:81`
+    becomes `golang-coverage-check.go`). Note that `filename_regex` is a
     _regex_, not a _glob_.
   - If a `function_regex` is provided the function name must match it; an empty
     or missing `function_regex` is ignored.
@@ -137,15 +137,15 @@ independently evaluated:
 
 **How can I tell which lines of code have not been tested?**
 
-Run `golang-coverage-pre-commit --coverage_html=browser` - it will open the
+Run `golang-coverage-check --coverage_html=browser` - it will open the
 coverage report in your browser.
 
-Run `golang-coverage-pre-commit --coverage_html=path` to output the path to the
+Run `golang-coverage-check --coverage_html=path` to output the path to the
 generated HTML File if opening in your browser doesn't work.
 
 **How can I debug rule matching?**
 
-Run `golang-coverage-pre-commit --debug_matching` - each coverage line and the
+Run `golang-coverage-check --debug_matching` - each coverage line and the
 rule that matches it will be printed. That tells you that the earlier rules in
 your config did not match that line and the later rules in your config were not
 reached.

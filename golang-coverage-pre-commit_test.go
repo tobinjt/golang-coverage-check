@@ -321,7 +321,7 @@ func TestReadLineWithRetry_Success(t *testing.T) {
 	assert.Nil(t, err)
 	line, err := readLineWithRetry(file)
 	assert.Nil(t, err)
-	assert.Equal(t, "module github.com/tobinjt/golang-coverage-pre-commit\n", line)
+	assert.Equal(t, "module github.com/tobinjt/golang-coverage-check\n", line)
 }
 
 func TestReadLineWithRetry_EOF(t *testing.T) {
@@ -374,7 +374,7 @@ func TestReadLineWithRetry_Error(t *testing.T) {
 func TestGoCoverCapturePathSuccess(t *testing.T) {
 	options := newTestOptions()
 	options.captureOutput = captureOutput
-	coverageFile, err := options.createTemp("", "golang-coverage-pre-commit.*.coverage-data")
+	coverageFile, err := options.createTemp("", "golang-coverage-check.*.coverage-data")
 	assert.Nil(t, err)
 	path, err := goCoverCapturePath(options, coverageFile.Name())
 	assert.Nil(t, err)
@@ -589,12 +589,12 @@ func TestGoCoverCreateTempFailure(t *testing.T) {
 
 func validCoverageOutput() []string {
 	coverage := `
-github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:26:		String			100.0%
-github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:48:		String			31.0%
-github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:53:		makeExampleConfig	50.0%
-github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:95:		parseYAMLConfig		100.0%
-github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:118:	realMain		17.3%
-github.com/tobinjt/golang-coverage-pre-commit/golang-coverage-pre-commit.go:140:	main			0.0%
+github.com/tobinjt/golang-coverage-check/golang-coverage-check.go:26:		String			100.0%
+github.com/tobinjt/golang-coverage-check/golang-coverage-check.go:48:		String			31.0%
+github.com/tobinjt/golang-coverage-check/golang-coverage-check.go:53:		makeExampleConfig	50.0%
+github.com/tobinjt/golang-coverage-check/golang-coverage-check.go:95:		parseYAMLConfig		100.0%
+github.com/tobinjt/golang-coverage-check/golang-coverage-check.go:118:	realMain		17.3%
+github.com/tobinjt/golang-coverage-check/golang-coverage-check.go:140:	main			0.0%
 total:											(statements)		38.1%
 `
 	return strings.Split(coverage, "\n")
@@ -602,44 +602,44 @@ total:											(statements)		38.1%
 
 func TestParseCoverageOutputSuccess(t *testing.T) {
 	options := newTestOptions()
-	options.modulePath = "github.com/tobinjt/golang-coverage-pre-commit/"
+	options.modulePath = "github.com/tobinjt/golang-coverage-check/"
 	results, err := parseCoverageOutput(options, validCoverageOutput())
 	assert.Nil(t, err)
 	assert.Equal(t, 6, len(results))
 
 	expected := []CoverageLine{
 		{
-			Filename:   "golang-coverage-pre-commit.go",
+			Filename:   "golang-coverage-check.go",
 			LineNumber: "26",
 			Function:   "String",
 			Coverage:   100.0,
 		},
 		{
-			Filename:   "golang-coverage-pre-commit.go",
+			Filename:   "golang-coverage-check.go",
 			LineNumber: "48",
 			Function:   "String",
 			Coverage:   31.0,
 		},
 		{
-			Filename:   "golang-coverage-pre-commit.go",
+			Filename:   "golang-coverage-check.go",
 			LineNumber: "53",
 			Function:   "makeExampleConfig",
 			Coverage:   50.0,
 		},
 		{
-			Filename:   "golang-coverage-pre-commit.go",
+			Filename:   "golang-coverage-check.go",
 			LineNumber: "95",
 			Function:   "parseYAMLConfig",
 			Coverage:   100.0,
 		},
 		{
-			Filename:   "golang-coverage-pre-commit.go",
+			Filename:   "golang-coverage-check.go",
 			LineNumber: "118",
 			Function:   "realMain",
 			Coverage:   17.3,
 		},
 		{
-			Filename:   "golang-coverage-pre-commit.go",
+			Filename:   "golang-coverage-check.go",
 			LineNumber: "140",
 			Function:   "main",
 			Coverage:   0.0,
@@ -652,9 +652,9 @@ func TestParseCoverageOutputFailure(t *testing.T) {
 	options := newTestOptions()
 
 	badInputLine := `
-github.com/.../golang-coverage-pre-commit.go:26:		String			100.0%
+github.com/.../golang-coverage-check.go:26:		String			100.0%
 asdf
-github.com/.../golang-coverage-pre-commit.go:140:	main			0.0%
+github.com/.../golang-coverage-check.go:140:	main			0.0%
 total:											(statements)		38.1%
 `
 	_, err := parseCoverageOutput(options, strings.Split(badInputLine, "\n"))
@@ -1141,7 +1141,7 @@ func TestRealMain(t *testing.T) {
 		// Note that from here on the failures are that coverage isn't high enough.
 		{
 			desc:   "checkCoverage",
-			err:    "golang-coverage-pre-commit.go:48:\tString\t31.0%: actual coverage 31.0% < default coverage 100.0%",
+			err:    "golang-coverage-check.go:48:\tString\t31.0%: actual coverage 31.0% < default coverage 100.0%",
 			output: "",
 			mod: func(opts Options) Options {
 				opts.captureOutput = func(string, ...string) ([]string, error) {
@@ -1152,7 +1152,7 @@ func TestRealMain(t *testing.T) {
 		},
 		{
 			desc:   "checkCoverage, with debugging output",
-			err:    "golang-coverage-pre-commit.go:48:\tString\t31.0%: actual coverage 31.0% < default coverage 100.0",
+			err:    "golang-coverage-check.go:48:\tString\t31.0%: actual coverage 31.0% < default coverage 100.0",
 			output: "Debug info for coverage matching",
 			mod: func(opts Options) Options {
 				opts.rawArgs = append(opts.rawArgs, "--debug_matching")

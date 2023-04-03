@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// These functions are not used by golang-coverage-pre-commit; they are used by
+// These functions are not used by golang-coverage-check; they are used by
 // the tests for makeFunctionInfoMap().
 
 package main

@@ -61,7 +61,7 @@ type Options struct {
 	setenv func(string, string) error
 
 	// Paths to read from.
-	// The config file to read, .golang-coverage-pre-commit.yaml except when
+	// The config file to read, .golang-coverage-check.yaml except when
 	// testing error handling.
 	configFile string
 	// The file to read module metadata from, "go.mod" except when testing error
@@ -115,7 +115,7 @@ func newOptions() Options {
 		exit:              os.Exit,
 		readLineWithRetry: readLineWithRetry,
 		setenv:            os.Setenv,
-		configFile:        ".golang-coverage-pre-commit.yaml",
+		configFile:        ".golang-coverage-check.yaml",
 		goMod:             "go.mod",
 		dirToParse:        ".",
 		programName:       os.Args[0],
@@ -174,7 +174,7 @@ func (rule Rule) String() string {
 		rule.FilenameRegex, rule.FunctionRegex, rule.ReceiverRegex, rule.Coverage, rule.Comment)
 }
 
-// Config represents an entire user config loaded from .golang-coverage-pre-commit.yaml.
+// Config represents an entire user config loaded from .golang-coverage-check.yaml.
 type Config struct {
 	// Comment is not interpreted or used; it is provided as a structured way of
 	// adding comments to a config, so that automated editing is easier.
@@ -384,12 +384,12 @@ func readLineWithRetry(file *os.File) (string, error) {
 // captured and printed to the user.  Returns an array of strings (only one
 // element) and an error on failure.
 func goCoverCapturePath(options Options, coverageFile string) ([]string, error) {
-	outputFile, err := options.createTemp("", "golang-coverage-pre-commit.*.html-path")
+	outputFile, err := options.createTemp("", "golang-coverage-check.*.html-path")
 	if err != nil {
 		return nil, err
 	}
 	defer os.Remove(outputFile.Name())
-	shellScript, err := options.createTemp("", "golang-coverage-pre-commit.*.sh")
+	shellScript, err := options.createTemp("", "golang-coverage-check.*.sh")
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +423,7 @@ echo "$@" > "%s"
 //     --coverage_html == htmlShowPath
 //   - an error if running any command failed.
 func goCover(options Options) ([]string, []string, error) {
-	file, err := options.createTemp("", "golang-coverage-pre-commit")
+	file, err := options.createTemp("", "golang-coverage-check")
 	if err != nil {
 		return nil, nil, err
 	}

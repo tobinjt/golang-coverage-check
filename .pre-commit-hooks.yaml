@@ -15,7 +15,7 @@
 - id: golang-coverage
   name: golang-coverage
   description: Check test coverage of Golang code is sufficiently high
-  entry: golang-coverage-pre-commit
+  entry: golang-coverage-check
   types: [go]
   language: golang
   pass_filenames: false

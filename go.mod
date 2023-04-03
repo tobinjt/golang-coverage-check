@@ -1,4 +1,4 @@
-module github.com/tobinjt/golang-coverage-pre-commit
+module github.com/tobinjt/golang-coverage-check
 
 go 1.18
 
