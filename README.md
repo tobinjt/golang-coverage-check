@@ -25,7 +25,7 @@ repos:
   - repo: https://github.com/tobinjt/golang-coverage-check.git
     rev: v1.0
     hooks:
-      - id: golang-coverage
+      - id: golang-coverage-check
 ```
 
 ## Configuration
