@@ -30,40 +30,38 @@ repos:
 
 ## Configuration
 
-A YAML config file named `.golang-coverage-check.yaml` is **_required_**.
-None of the fields are required inside the file; an empty config is equivalent
-to a config containing only `default_coverage: 0`. You can generate an example
-config (shown below) by running `golang-coverage-check --example_config`.
+A YAML config file named `.golang-coverage-check.yaml` is **_required_**. None
+of the fields are required inside the file; an empty config is equivalent to a
+config containing only `default_coverage: 0`. You can generate an example config
+(shown below) by running `golang-coverage-check --example_config`.
 
 ### Example config
 
 ```yaml
-comment:
-  Comment is not interpreted or used; it is provided as a structured way of
-  adding comments to a config, so that automated editing is easier.
+comment: Comment is not interpreted or used; it is provided as a structured way
+  of adding comments to a config, so that automated editing is easier.
 default_coverage: 80
 rules:
   - comment: Low coverage is acceptable for main()
-    filename_regex: ""
+    filename_regex: ''
     function_regex: ^main$
-    receiver_regex: ""
+    receiver_regex: ''
     coverage: 50
-  - comment:
-      All the fooOrDie() functions should be fully tested because they panic()
-      on failure
-    filename_regex: ""
+  - comment: All the fooOrDie() functions should be fully tested because they
+      panic() on failure
+    filename_regex: ''
     function_regex: OrDie$
-    receiver_regex: ""
+    receiver_regex: ''
     coverage: 100
   - comment: Improve test coverage for parse_json.go?
     filename_regex: ^parse_json.go$
-    function_regex: ""
-    receiver_regex: ""
+    function_regex: ''
+    receiver_regex: ''
     coverage: 73
   - comment: Full coverage for other parsers
     filename_regex: ^parse.*.go$
-    function_regex: ""
-    receiver_regex: ""
+    function_regex: ''
+    receiver_regex: ''
     coverage: 100
   - comment: Url.String() has low coverage
     filename_regex: ^urls.go$
@@ -71,9 +69,9 @@ rules:
     receiver_regex: ^Url$
     coverage: 56
   - comment: String() everywhere else should have high coverage
-    filename_regex: ""
+    filename_regex: ''
     function_regex: ^String$
-    receiver_regex: ""
+    receiver_regex: ''
     coverage: 100
 ```
 
@@ -81,12 +79,12 @@ rules:
 
 **_Top-level fields_**
 
-- `comment`: unused by `golang-coverage-check`, it exists to support
-  structured comments that survive de-serialisation and re-serialisation, e.g.
-  when combining config snippets.
+- `comment`: unused by `golang-coverage-check`, it exists to support structured
+  comments that survive de-serialisation and re-serialisation, e.g. when
+  combining config snippets.
 - `default_coverage`: this is the default required coverage level that is used
-  when a coverage line is not matched by a more specific rule (see [Order of
-  evaluation](#order-of-evaluation) below).
+  when a coverage line is not matched by a more specific rule (see
+  [Order of evaluation](#order-of-evaluation) below).
 - `rules`: a list of rules (described next).
 
 **_Rules_**
@@ -94,9 +92,9 @@ rules:
 Rules have the following fields; `coverage` is required, and at least one regex
 must be non-empty.
 
-- `comment`: unused by `golang-coverage-check`, it exists to support
-  structured comments that survive de-serialisation and re-serialisation, e.g.
-  when combining config snippets.
+- `comment`: unused by `golang-coverage-check`, it exists to support structured
+  comments that survive de-serialisation and re-serialisation, e.g. when
+  combining config snippets.
 - `filename_regex`: the regular expression that the filename is matched against.
   Ignored if empty.
 - `function_regex`: the regular expression that the function name is matched
@@ -126,9 +124,9 @@ independently evaluated:
     because otherwise the rule will not match.
   - If every non-empty regex matches, the required coverage is compared against
     the actual coverage, and an error printed if the actual coverage is not high
-    enough. The following rules in the config will be skipped for this
-    function, allowing you to write more specific rules first followed by more
-    general rules later.
+    enough. The following rules in the config will be skipped for this function,
+    allowing you to write more specific rules first followed by more general
+    rules later.
 
 - If no rules matched, `default_coverage` is compared against the actual
   coverage, and an error printed if the actual coverage is not high enough.
@@ -137,17 +135,17 @@ independently evaluated:
 
 **How can I tell which lines of code have not been tested?**
 
-Run `golang-coverage-check --coverage_html=browser` - it will open the
-coverage report in your browser.
+Run `golang-coverage-check --coverage_html=browser` - it will open the coverage
+report in your browser.
 
 Run `golang-coverage-check --coverage_html=path` to output the path to the
 generated HTML File if opening in your browser doesn't work.
 
 **How can I debug rule matching?**
 
-Run `golang-coverage-check --debug_matching` - each coverage line and the
-rule that matches it will be printed. That tells you that the earlier rules in
-your config did not match that line and the later rules in your config were not
+Run `golang-coverage-check --debug_matching` - each coverage line and the rule
+that matches it will be printed. That tells you that the earlier rules in your
+config did not match that line and the later rules in your config were not
 reached.
 
 **How can I pass different arguments to `go test`?**
@@ -186,9 +184,3 @@ See [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for details.
 ## License
 
 Apache 2.0; see [`LICENSE`](LICENSE) for details.
-
-## Disclaimer
-
-This project is not an official Google project. It is not supported by
-Google and Google specifically disclaims all warranties as to its quality,
-merchantability, or fitness for a particular purpose.
