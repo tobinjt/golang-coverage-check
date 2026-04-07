@@ -18,13 +18,21 @@ jobs:
           go-version: 'stable'
           cache: true # Automatically caches Go modules and build cache
 
+      - name: Install goimports
+        run: go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: Check Imports
+        run: |
+          goimports .
+          git diff --exit-code
+
       - name: Check Formatting
         run: |
           go fmt .
           git diff --exit-code
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
 
       - name: Govulncheck
         uses: golang/govulncheck-action@v1
