@@ -24,6 +24,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -320,28 +321,38 @@ func (fl FunctionInfo) key() string {
 func makeFunctionInfoMap(opts Options) (FunctionInfoMap, error) {
 	fmap := make(FunctionInfoMap)
 	fset := token.NewFileSet()
-	packageMap, err := parser.ParseDir(fset, opts.dirToParse, nil, 0)
+
+	entries, err := os.ReadDir(opts.dirToParse)
 	if err != nil {
 		return nil, err
 	}
-	for _, pkg := range packageMap {
-		for _, file := range pkg.Files {
-			for _, decl := range file.Decls {
-				if function, ok := decl.(*ast.FuncDecl); ok {
-					pos := fset.Position(function.Pos())
-					fl := FunctionInfo{
-						Filename:   pos.Filename,
-						LineNumber: fmt.Sprintf("%d", pos.Line),
-						Function:   function.Name.Name,
-						Receiver:   "",
-					}
-					if function.Recv != nil {
-						// This is ugly, but I haven't found a better way to get the string
-						// out of the data structure.
-						fl.Receiver = fmt.Sprintf("%v", function.Recv.List[0].Type)
-					}
-					fmap[fl.key()] = fl
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+
+		path := filepath.Join(opts.dirToParse, entry.Name())
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, decl := range file.Decls {
+			if function, ok := decl.(*ast.FuncDecl); ok {
+				pos := fset.Position(function.Pos())
+				fl := FunctionInfo{
+					Filename:   pos.Filename,
+					LineNumber: fmt.Sprintf("%d", pos.Line),
+					Function:   function.Name.Name,
+					Receiver:   "",
 				}
+				if function.Recv != nil {
+					// This is ugly, but I haven't found a better way to get the string
+					// out of the data structure.
+					fl.Receiver = fmt.Sprintf("%v", function.Recv.List[0].Type)
+				}
+				fmap[fl.key()] = fl
 			}
 		}
 	}

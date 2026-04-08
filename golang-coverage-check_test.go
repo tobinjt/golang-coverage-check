@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -265,6 +266,23 @@ func TestMakeFunctionInfoMapFailure(t *testing.T) {
 	options := newTestOptions()
 	options.dirToParse = "does-not-exist"
 	_, err := makeFunctionInfoMap(options)
+	assert.Error(t, err)
+}
+
+func TestMakeFunctionInfoMapParseFileFailure(t *testing.T) {
+	options := newTestOptions()
+
+	// Create a temporary directory with an invalid .go file
+	tmpDir, err := os.MkdirTemp("", "golang-coverage-check-test")
+	assert.Nil(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	invalidGoFile := filepath.Join(tmpDir, "invalid.go")
+	err = os.WriteFile(invalidGoFile, []byte("this is not valid go code"), 0644)
+	assert.Nil(t, err)
+
+	options.dirToParse = tmpDir
+	_, err = makeFunctionInfoMap(options)
 	assert.Error(t, err)
 }
 
