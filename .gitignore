@@ -14,5 +14,9 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# Binary build with `go build`.
+# Binary built with `go build`.
 golang-coverage-check
+
+# Generated coverage information.
+coverage.out
+coverage.html

@@ -31,7 +31,7 @@ import (
 func newTestOptions() Options {
 	options := newOptions()
 	options.rawArgs = []string{}
-	options.captureOutput = func(string, ...string) ([]string, error) {
+	options.captureOutput = func([]string, string, ...string) ([]string, error) {
 		panic("captureOutput was called without being set by the test")
 	}
 	return options
@@ -320,11 +320,11 @@ func TestMakeFunctionInfoMapSupport(t *testing.T) {
 }
 
 func TestCaptureOutput(t *testing.T) {
-	output, err := captureOutput("cat", "/non-existent")
+	output, err := captureOutput(nil, "cat", "/non-existent")
 	assert.Nil(t, output)
 	assert.ErrorContains(t, err, "cat: /non-existent: No such file or directory")
 
-	output, err = captureOutput("cat", "/etc/passwd")
+	output, err = captureOutput(nil, "cat", "/etc/passwd")
 	assert.Nil(t, err)
 	rootLines := []string{}
 	for _, line := range output {
@@ -383,11 +383,39 @@ func TestReadLineWithRetry_Error(t *testing.T) {
 		errCh <- err
 	}
 	go runMe()
+
 	time.Sleep(3 * sleepTime)
 	assert.Nil(t, file.Close())
+
 	line, err := <-strCh, <-errCh
 	assert.ErrorContains(t, err, "file already closed")
 	assert.Equal(t, "", line)
+}
+
+func TestReadLineWithRetry_Timeout(t *testing.T) {
+	file, err := os.CreateTemp("", "TestReadLineWithRetry_Timeout.*")
+	assert.Nil(t, err)
+	defer func() { assert.Nil(t, os.Remove(file.Name())) }()
+
+	strCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	runMe := func() {
+		line, err := readLineWithRetry(file)
+		strCh <- line
+		errCh <- err
+	}
+	go runMe()
+
+	// Wait slightly longer than the 5s timeout, accounting for time.Sleep overhead
+	select {
+	case line := <-strCh:
+		err := <-errCh
+		assert.ErrorContains(t, err, "timed out waiting for input in readLineWithRetry")
+		assert.Equal(t, "", line)
+	case <-time.After(10 * time.Second):
+		t.Fatal("readLineWithRetry still hanging")
+	}
+	assert.Nil(t, file.Close())
 }
 
 func TestGoCoverCapturePathSuccess(t *testing.T) {
@@ -427,7 +455,7 @@ func TestGoCoverCapturePath_CreateTempFailedSecondTime(t *testing.T) {
 
 func TestGoCoverCapturePath_ReadingFileFailed(t *testing.T) {
 	options := newTestOptions()
-	options.captureOutput = func(command string, args ...string) ([]string, error) {
+	options.captureOutput = func(env []string, command string, args ...string) ([]string, error) {
 		return nil, nil
 	}
 	options.readLineWithRetry = func(*os.File) (string, error) {
@@ -468,19 +496,19 @@ func TestGoCoverCapturePath_ChmodFailed(t *testing.T) {
 	assert.ErrorContains(t, err, "chmod failed")
 }
 
-func TestGoCoverCapturePath_SetenvFailed(t *testing.T) {
+func TestGoCoverCapturePath_CloseFailed(t *testing.T) {
 	options := newTestOptions()
-	options.setenv = func(string, string) error {
-		return errors.New("setenv failed")
+	options.close = func(*os.File) error {
+		return errors.New("close failed")
 	}
 	path, err := goCoverCapturePath(options, "")
 	assert.Nil(t, path)
-	assert.ErrorContains(t, err, "setenv failed")
+	assert.ErrorContains(t, err, "close failed")
 }
 
 func TestGoCoverCapturePath_CaptureOutputFailed(t *testing.T) {
 	options := newTestOptions()
-	options.captureOutput = func(command string, args ...string) ([]string, error) {
+	options.captureOutput = func(env []string, command string, args ...string) ([]string, error) {
 		return nil, errors.New("captureOutput failed")
 	}
 	path, err := goCoverCapturePath(options, "")
@@ -495,7 +523,7 @@ func TestGoCoverSuccess(t *testing.T) {
 	}
 	commandRun := map[string]bool{}
 	options := newTestOptions()
-	options.captureOutput = func(command string, args ...string) ([]string, error) {
+	options.captureOutput = func(env []string, command string, args ...string) ([]string, error) {
 		// The random filename is always the last arg, so drop it.
 		parts := args[0 : len(args)-1]
 		key := strings.Join(parts, " ")
@@ -520,7 +548,7 @@ func TestGoCoverBrowserFailure(t *testing.T) {
 	commandRun := map[string]bool{}
 	options := newTestOptions()
 	options.coverageHTML = htmlOpenInBrowser
-	options.captureOutput = func(command string, args ...string) ([]string, error) {
+	options.captureOutput = func(env []string, command string, args ...string) ([]string, error) {
 		// The random filename is always the last arg, so drop it.
 		parts := args[0 : len(args)-1]
 		key := strings.Join(parts, " ")
@@ -545,7 +573,7 @@ func TestGoCoverBrowser(t *testing.T) {
 	commandRun := map[string]bool{}
 	options := newTestOptions()
 	options.coverageHTML = htmlOpenInBrowser
-	options.captureOutput = func(command string, args ...string) ([]string, error) {
+	options.captureOutput = func(env []string, command string, args ...string) ([]string, error) {
 		// The random filename is always the last arg, so drop it.
 		parts := args[0 : len(args)-1]
 		key := strings.Join(parts, " ")
@@ -565,7 +593,7 @@ func TestGoCoverBrowser(t *testing.T) {
 func TestGoCoverPathFailure(t *testing.T) {
 	options := newTestOptions()
 	options.coverageHTML = htmlShowPath
-	options.captureOutput = func(command string, args ...string) ([]string, error) {
+	options.captureOutput = func(env []string, command string, args ...string) ([]string, error) {
 		return nil, nil
 	}
 	options.readLineWithRetry = func(*os.File) (string, error) {
@@ -586,7 +614,7 @@ func TestGoCoverPath(t *testing.T) {
 	commandRun := map[string]bool{}
 	options := newTestOptions()
 	options.coverageHTML = htmlShowPath
-	options.captureOutput = func(command string, args ...string) ([]string, error) {
+	options.captureOutput = func(env []string, command string, args ...string) ([]string, error) {
 		// The random filename is always the last arg, so drop it.
 		parts := args[0 : len(args)-1]
 		key := strings.Join(parts, " ")
@@ -608,7 +636,7 @@ func TestGoCoverPath(t *testing.T) {
 
 func TestGoCoverCaptureFailure(t *testing.T) {
 	options := newTestOptions()
-	options.captureOutput = func(string, ...string) ([]string, error) {
+	options.captureOutput = func([]string, string, ...string) ([]string, error) {
 		return []string{"this should not be seen"}, errors.New("error for testing")
 	}
 	actual, _, err := goCover(options)
@@ -1094,7 +1122,7 @@ func TestRealMain(t *testing.T) {
 			output: "Generated rule for parseYAMLConfig",
 			mod: func(opts Options) Options {
 				opts.rawArgs = []string{"--generate_config"}
-				opts.captureOutput = func(string, ...string) ([]string, error) {
+				opts.captureOutput = func([]string, string, ...string) ([]string, error) {
 					return validCoverageOutput(), nil
 				}
 				return opts
@@ -1171,7 +1199,7 @@ func TestRealMain(t *testing.T) {
 			err:    "expected 3 parts, found 1, in \"qwerty\"",
 			output: "",
 			mod: func(opts Options) Options {
-				opts.captureOutput = func(string, ...string) ([]string, error) {
+				opts.captureOutput = func([]string, string, ...string) ([]string, error) {
 					return []string{"qwerty"}, nil
 				}
 				return opts
@@ -1183,7 +1211,7 @@ func TestRealMain(t *testing.T) {
 			err:    "golang-coverage-check.go:48:\tString\t31.0%: actual coverage 31.0% < default coverage 100.0%",
 			output: "",
 			mod: func(opts Options) Options {
-				opts.captureOutput = func(string, ...string) ([]string, error) {
+				opts.captureOutput = func([]string, string, ...string) ([]string, error) {
 					return validCoverageOutput(), nil
 				}
 				return opts
@@ -1195,7 +1223,7 @@ func TestRealMain(t *testing.T) {
 			output: "Debug info for coverage matching",
 			mod: func(opts Options) Options {
 				opts.rawArgs = append(opts.rawArgs, "--debug_matching")
-				opts.captureOutput = func(string, ...string) ([]string, error) {
+				opts.captureOutput = func([]string, string, ...string) ([]string, error) {
 					return validCoverageOutput(), nil
 				}
 				return opts

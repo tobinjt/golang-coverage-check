@@ -48,18 +48,18 @@ const sleepTime = 10 * time.Millisecond
 type Options struct {
 	// Function pointers for dependency injection.
 	// Used by goCover to run binaries and capture their stdout.
-	captureOutput func(string, ...string) ([]string, error)
+	captureOutput func([]string, string, ...string) ([]string, error)
 	// Makes the shell script used by --coverage_html=path executable.
 	chmod func(*os.File, os.FileMode) error
 	// Used to create a temporary file.
 	createTemp func(string, string) (*os.File, error)
+	// Used to close a file.
+	close func(*os.File) error
 	// Called when exiting on error.
 	exit func(int)
 	// Reads a line from the output file created by --coverage_html=path,
 	// retrying on EOF.
 	readLineWithRetry func(*os.File) (string, error)
-	// Used to set $BROWSER in goCoverCapturePath.
-	setenv func(string, string) error
 
 	// Paths to read from.
 	// The config file to read, .golang-coverage-check.yaml except when
@@ -110,12 +110,15 @@ func newOptions() Options {
 		}
 	}
 	return Options{
-		captureOutput:     captureOutput,
-		chmod:             chmod,
-		createTemp:        os.CreateTemp,
-		exit:              os.Exit,
+		captureOutput: captureOutput,
+		chmod:         chmod,
+		createTemp:    os.CreateTemp,
+		close: func(f *os.File) error {
+			return f.Close()
+		},
+		exit: os.Exit,
+
 		readLineWithRetry: readLineWithRetry,
-		setenv:            os.Setenv,
 		configFile:        ".golang-coverage-check.yaml",
 		goMod:             "go.mod",
 		dirToParse:        ".",
@@ -362,8 +365,11 @@ func makeFunctionInfoMap(opts Options) (FunctionInfoMap, error) {
 
 // captureOutput runs a command and returns the output on success (a slice of
 // strings) and an error on failure.
-func captureOutput(command string, args ...string) ([]string, error) {
+func captureOutput(env []string, command string, args ...string) ([]string, error) {
 	cmd := exec.Command(command, args...)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed running `%s`: %w\n%s", cmd, err, output)
@@ -377,7 +383,12 @@ func readLineWithRetry(file *os.File) (string, error) {
 	reader := bufio.NewReader(file)
 	var line string
 	var err error
+	start := time.Now()
+	timeout := 5 * time.Second
 	for {
+		if time.Since(start) > timeout {
+			return "", fmt.Errorf("timed out waiting for input in readLineWithRetry")
+		}
 		line, err = reader.ReadString('\n')
 		if err == nil {
 			break
@@ -417,10 +428,11 @@ echo "$@" > "%s"
 	if err = options.chmod(shellScript, 0755); err != nil {
 		return nil, err
 	}
-	if err = options.setenv("BROWSER", shellScript.Name()); err != nil {
+	if err = options.close(shellScript); err != nil {
 		return nil, err
 	}
-	_, err = options.captureOutput("go", "tool", "cover", "--html", coverageFile)
+	env := []string{"BROWSER=" + shellScript.Name()}
+	_, err = options.captureOutput(env, "go", "tool", "cover", "--html", coverageFile)
 	if err != nil {
 		return nil, err
 	}
@@ -443,13 +455,13 @@ func goCover(options Options) ([]string, []string, error) {
 	}
 	defer func() { _ = os.Remove(file.Name()) }()
 
-	_, err = options.captureOutput("go", "test", "--covermode", "set", "--coverprofile", file.Name())
+	_, err = options.captureOutput(nil, "go", "test", "--covermode", "set", "--coverprofile", file.Name())
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if options.coverageHTML == htmlOpenInBrowser {
-		_, err = options.captureOutput("go", "tool", "cover", "--html", file.Name())
+		_, err = options.captureOutput(nil, "go", "tool", "cover", "--html", file.Name())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -463,7 +475,7 @@ func goCover(options Options) ([]string, []string, error) {
 		}
 	}
 
-	lines, err := options.captureOutput("go", "tool", "cover", "--func", file.Name())
+	lines, err := options.captureOutput(nil, "go", "tool", "cover", "--func", file.Name())
 	return lines, htmlPath, err
 }
 
