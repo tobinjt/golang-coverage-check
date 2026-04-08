@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -365,7 +366,7 @@ func TestReadLineWithRetry_Error(t *testing.T) {
 	}
 	go runMe()
 	time.Sleep(3 * sleepTime)
-	file.Close()
+	assert.Nil(t, file.Close())
 	line, err := <-strCh, <-errCh
 	assert.ErrorContains(t, err, "file already closed")
 	assert.Equal(t, "", line)
@@ -417,6 +418,26 @@ func TestGoCoverCapturePath_ReadingFileFailed(t *testing.T) {
 	path, err := goCoverCapturePath(options, "")
 	assert.Nil(t, path)
 	assert.ErrorContains(t, err, "readLineWithRetry failed")
+}
+
+func TestGoCoverCapturePath_FprintfFailed(t *testing.T) {
+	options := newTestOptions()
+	createdCount := 0
+	options.createTemp = func(dir, pattern string) (*os.File, error) {
+		createdCount++
+		file, err := os.CreateTemp(dir, pattern)
+		if err != nil {
+			return nil, err
+		}
+		if createdCount == 2 {
+			// Close the second file immediately so Fprintf will fail.
+			assert.Nil(t, file.Close())
+		}
+		return file, nil
+	}
+	path, err := goCoverCapturePath(options, "")
+	assert.Nil(t, path)
+	assert.ErrorContains(t, err, "file already closed")
 }
 
 func TestGoCoverCapturePath_ChmodFailed(t *testing.T) {
@@ -1182,12 +1203,19 @@ func TestRealMain(t *testing.T) {
 	}
 }
 
+type errorWriter struct{}
+
+func (e *errorWriter) Write(p []byte) (n int, err error) {
+	return 0, errors.New("write error")
+}
+
 func TestRunAndPrint(t *testing.T) {
 	tests := []struct {
-		desc   string
-		stdout []string
-		stderr []string
-		err    error
+		desc         string
+		stdout       []string
+		stderr       []string
+		err          error
+		stdoutWriter io.Writer
 	}{
 		{
 			desc:   "stdout only",
@@ -1207,40 +1235,56 @@ func TestRunAndPrint(t *testing.T) {
 			stderr: []string{"written to stderr"},
 			err:    errors.New("also an error"),
 		},
+		{
+			desc:         "stdout print error",
+			stdout:       []string{"this will fail to print"},
+			stdoutWriter: &errorWriter{},
+		},
 	}
 
 	for _, test := range tests {
-		options := newTestOptions()
-		stdout := new(bytes.Buffer)
-		stderr := new(bytes.Buffer)
-		options.stdout = stdout
-		options.stderr = stderr
-
-		exitCalledWith := -1
-		options.exit = func(status int) {
-			exitCalledWith = status
-		}
-		runMe := func(options Options) ([]string, []string, error) {
-			return test.stdout, test.stderr, test.err
-		}
-
-		runAndPrint(options, runMe)
-		if test.stderr != nil || test.err != nil {
-			assert.Equal(t, 1, exitCalledWith)
-			if test.stderr != nil {
-				assert.Contains(t, stderr.String(), test.stderr[0])
+		t.Run(test.desc, func(t *testing.T) {
+			options := newTestOptions()
+			var stdoutBuf *bytes.Buffer
+			if test.stdoutWriter != nil {
+				options.stdout = test.stdoutWriter
+			} else {
+				stdoutBuf = new(bytes.Buffer)
+				options.stdout = stdoutBuf
 			}
-			if test.err != nil {
-				assert.Contains(t, stderr.String(), test.err.Error())
+			stderr := new(bytes.Buffer)
+			options.stderr = stderr
+
+			exitCalledWith := -1
+			options.exit = func(status int) {
+				exitCalledWith = status
 			}
-		} else {
-			assert.Equal(t, 0, exitCalledWith)
-			assert.Empty(t, stderr.String())
-		}
-		if test.stdout != nil {
-			assert.Contains(t, stdout.String(), test.stdout[0])
-		} else {
-			assert.Empty(t, stdout.String())
-		}
+			runMe := func(options Options) ([]string, []string, error) {
+				return test.stdout, test.stderr, test.err
+			}
+
+			runAndPrint(options, runMe)
+			if test.stderr != nil || test.err != nil || test.stdoutWriter != nil {
+				assert.Equal(t, 1, exitCalledWith)
+				if test.stderr != nil {
+					assert.Contains(t, stderr.String(), test.stderr[0])
+				}
+				if test.err != nil {
+					assert.Contains(t, stderr.String(), test.err.Error())
+				}
+			} else {
+				assert.Equal(t, 0, exitCalledWith)
+				assert.Empty(t, stderr.String())
+			}
+			if test.stdout != nil {
+				if test.stdoutWriter == nil {
+					assert.Contains(t, stdoutBuf.String(), test.stdout[0])
+				}
+			} else {
+				if test.stdoutWriter == nil {
+					assert.Empty(t, stdoutBuf.String())
+				}
+			}
+		})
 	}
 }

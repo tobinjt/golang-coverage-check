@@ -388,18 +388,21 @@ func goCoverCapturePath(options Options, coverageFile string) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer os.Remove(outputFile.Name())
+	defer func() { _ = os.Remove(outputFile.Name()) }()
 	shellScript, err := options.createTemp("", "golang-coverage-check.*.sh")
 	if err != nil {
 		return nil, err
 	}
-	defer os.Remove(shellScript.Name())
+	defer func() { _ = os.Remove(shellScript.Name()) }()
 
 	shellScriptContents := `#!/bin/sh
 
 echo "$@" > "%s"
 `
-	fmt.Fprintf(shellScript, shellScriptContents, outputFile.Name())
+	_, err = fmt.Fprintf(shellScript, shellScriptContents, outputFile.Name())
+	if err != nil {
+		return nil, err
+	}
 	if err = options.chmod(shellScript, 0755); err != nil {
 		return nil, err
 	}
@@ -427,7 +430,7 @@ func goCover(options Options) ([]string, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	defer os.Remove(file.Name())
+	defer func() { _ = os.Remove(file.Name()) }()
 
 	_, err = options.captureOutput("go", "test", "--covermode", "set", "--coverprofile", file.Name())
 	if err != nil {
@@ -604,11 +607,11 @@ func setupFlagsAndUsage(options *Options) *flag.FlagSet {
 	flags := flag.NewFlagSet("", flag.ContinueOnError)
 	flags.SetOutput(options.flagOutput)
 	flags.Usage = func() {
-		fmt.Fprintf(flags.Output(), "Usage of %s:\n", options.programName)
+		_, _ = fmt.Fprintf(flags.Output(), "Usage of %s:\n", options.programName)
 		flags.PrintDefaults()
 		message := []rune(multipleBooleanFlagsMessage())
 		message[0] = unicode.ToUpper(message[0])
-		fmt.Fprintf(flags.Output(), "\n%s.\n\n", string(message))
+		_, _ = fmt.Fprintf(flags.Output(), "\n%s.\n\n", string(message))
 	}
 
 	flags.BoolVar(&options.outputExampleConfig, "example_config", false,
@@ -703,14 +706,16 @@ func runAndPrint(options Options, runMe func(options Options) ([]string, []strin
 	stdout, stderr, err := runMe(options)
 	exitStatus := 0
 	if len(stdout) > 0 {
-		fmt.Fprint(options.stdout, strings.Join(stdout, "\n"))
+		if _, printErr := fmt.Fprint(options.stdout, strings.Join(stdout, "\n")); printErr != nil {
+			exitStatus = 1
+		}
 	}
 	if len(stderr) > 0 {
-		fmt.Fprint(options.stderr, strings.Join(stderr, "\n"))
+		_, _ = fmt.Fprint(options.stderr, strings.Join(stderr, "\n"))
 		exitStatus = 1
 	}
 	if err != nil {
-		fmt.Fprintf(options.stderr, "%v: %v\n", options.programName, err)
+		_, _ = fmt.Fprintf(options.stderr, "%v: %v\n", options.programName, err)
 		exitStatus = 1
 	}
 	options.exit(exitStatus)
