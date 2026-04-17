@@ -1334,3 +1334,40 @@ func TestRunAndPrint(t *testing.T) {
 		})
 	}
 }
+
+func TestFunctionLocationKey(t *testing.T) {
+	tests := []struct {
+		name       string
+		filename   string
+		lineNumber string
+		expected   string
+	}{
+		{
+			name:       "basic filename and line",
+			filename:   "test.go",
+			lineNumber: "42",
+			expected:   "test.go:42",
+		},
+		{
+			name:       "empty strings",
+			filename:   "",
+			lineNumber: "",
+			expected:   ":",
+		},
+		{
+			name:       "path with directories",
+			filename:   "foo/bar/test.go",
+			lineNumber: "100",
+			expected:   "foo/bar/test.go:100",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := functionLocationKey(tt.filename, tt.lineNumber)
+			if got != tt.expected {
+				t.Errorf("functionLocationKey(%q, %q) = %q; want %q", tt.filename, tt.lineNumber, got, tt.expected)
+			}
+		})
+	}
+}
