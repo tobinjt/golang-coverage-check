@@ -1346,3 +1346,13 @@ func TestRunAndPrint(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkMakeFunctionInfoMap(b *testing.B) {
+	options := newTestOptions()
+	for i := 0; i < b.N; i++ {
+		_, err := makeFunctionInfoMap(options)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
