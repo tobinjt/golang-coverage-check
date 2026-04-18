@@ -346,7 +346,7 @@ func makeFunctionInfoMap(opts Options) (FunctionInfoMap, error) {
 				pos := fset.Position(function.Pos())
 				fl := FunctionInfo{
 					Filename:   pos.Filename,
-					LineNumber: fmt.Sprintf("%d", pos.Line),
+					LineNumber: strconv.Itoa(pos.Line),
 					Function:   function.Name.Name,
 					Receiver:   "",
 				}
@@ -483,7 +483,6 @@ func goCover(options Options) ([]string, []string, error) {
 // CoverageLine, returning a slice of CoverageLine and an error.
 func parseCoverageOutput(options Options, output []string) ([]CoverageLine, error) {
 	results := []CoverageLine{}
-	lineSplitter := regexp.MustCompile(`\t+`)
 	percentageExtractor := regexp.MustCompile(`^(.*)%$`)
 
 	for i := range output {
@@ -491,7 +490,7 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 			// Skip blank lines.
 			continue
 		}
-		parts := lineSplitter.Split(output[i], -1)
+		parts := strings.Fields(output[i])
 		if len(parts) != 3 {
 			return nil, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
 		}
