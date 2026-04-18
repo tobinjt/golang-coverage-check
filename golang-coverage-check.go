@@ -346,7 +346,7 @@ func makeFunctionInfoMap(opts Options) (FunctionInfoMap, error) {
 				pos := fset.Position(function.Pos())
 				fl := FunctionInfo{
 					Filename:   pos.Filename,
-					LineNumber: fmt.Sprintf("%d", pos.Line),
+					LineNumber: strconv.Itoa(pos.Line),
 					Function:   function.Name.Name,
 					Receiver:   "",
 				}
