@@ -1359,7 +1359,7 @@ func TestMainFunction(t *testing.T) {
 	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("process ran with err %v, want exit status 0", err)
-  }
+	}
 }
 
 func BenchmarkMakeFunctionInfoMap(b *testing.B) {
