@@ -484,7 +484,6 @@ func goCover(options Options) ([]string, []string, error) {
 func parseCoverageOutput(options Options, output []string) ([]CoverageLine, error) {
 	results := []CoverageLine{}
 	lineSplitter := regexp.MustCompile(`\t+`)
-	percentageExtractor := regexp.MustCompile(`^(.*)%$`)
 
 	for i := range output {
 		if len(output[i]) == 0 {
@@ -500,11 +499,11 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 		}
 		rawFilename, rawFunction, rawPercentage := parts[0], parts[1], parts[2]
 
-		matches := percentageExtractor.FindStringSubmatch(rawPercentage)
-		if len(matches) == 0 {
+		if !strings.HasSuffix(rawPercentage, "%") {
 			return nil, fmt.Errorf("could not extract percentage from \"%v\"", rawPercentage)
 		}
-		percentage, err := strconv.ParseFloat(matches[1], 64)
+		percentageStr := strings.TrimSuffix(rawPercentage, "%")
+		percentage, err := strconv.ParseFloat(percentageStr, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed parsing \"%v\" as a float: %w", rawPercentage, err)
 		}
