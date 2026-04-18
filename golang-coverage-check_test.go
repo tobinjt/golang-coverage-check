@@ -29,6 +29,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestFunctionLocationKey(t *testing.T) {
+	assert.Equal(t, "file.go:123", functionLocationKey("file.go", "123"))
+}
+
+func TestFunctionInfoKey(t *testing.T) {
+	fi := FunctionInfo{
+		Filename:   "example.go",
+		LineNumber: "42",
+	}
+	assert.Equal(t, "example.go:42", fi.key())
+}
+
 func newTestOptions() Options {
 	options := newOptions()
 	options.rawArgs = []string{}
@@ -1347,5 +1359,15 @@ func TestMainFunction(t *testing.T) {
 	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("process ran with err %v, want exit status 0", err)
+  }
+}
+
+func BenchmarkMakeFunctionInfoMap(b *testing.B) {
+	options := newTestOptions()
+	for i := 0; i < b.N; i++ {
+		_, err := makeFunctionInfoMap(options)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }

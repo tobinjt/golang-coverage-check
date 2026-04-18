@@ -346,7 +346,7 @@ func makeFunctionInfoMap(opts Options) (FunctionInfoMap, error) {
 				pos := fset.Position(function.Pos())
 				fl := FunctionInfo{
 					Filename:   pos.Filename,
-					LineNumber: fmt.Sprintf("%d", pos.Line),
+					LineNumber: strconv.Itoa(pos.Line),
 					Function:   function.Name.Name,
 					Receiver:   "",
 				}
@@ -483,15 +483,13 @@ func goCover(options Options) ([]string, []string, error) {
 // CoverageLine, returning a slice of CoverageLine and an error.
 func parseCoverageOutput(options Options, output []string) ([]CoverageLine, error) {
 	results := []CoverageLine{}
-	lineSplitter := regexp.MustCompile(`\t+`)
-	percentageExtractor := regexp.MustCompile(`^(.*)%$`)
 
 	for i := range output {
 		if len(output[i]) == 0 {
 			// Skip blank lines.
 			continue
 		}
-		parts := lineSplitter.Split(output[i], -1)
+		parts := strings.Fields(output[i])
 		if len(parts) != 3 {
 			return nil, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
 		}
@@ -500,11 +498,11 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 		}
 		rawFilename, rawFunction, rawPercentage := parts[0], parts[1], parts[2]
 
-		matches := percentageExtractor.FindStringSubmatch(rawPercentage)
-		if len(matches) == 0 {
+		if !strings.HasSuffix(rawPercentage, "%") {
 			return nil, fmt.Errorf("could not extract percentage from \"%v\"", rawPercentage)
 		}
-		percentage, err := strconv.ParseFloat(matches[1], 64)
+		percentageStr := strings.TrimSuffix(rawPercentage, "%")
+		percentage, err := strconv.ParseFloat(percentageStr, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed parsing \"%v\" as a float: %w", rawPercentage, err)
 		}
