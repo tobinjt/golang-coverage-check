@@ -1334,3 +1334,30 @@ func TestRunAndPrint(t *testing.T) {
 		})
 	}
 }
+
+func TestNewOptions(t *testing.T) {
+	opts := newOptions()
+
+	assert.NotNil(t, opts.captureOutput)
+	assert.NotNil(t, opts.chmod)
+	assert.NotNil(t, opts.createTemp)
+	assert.NotNil(t, opts.close)
+	assert.NotNil(t, opts.exit)
+	assert.NotNil(t, opts.readLineWithRetry)
+
+	assert.Equal(t, ".golang-coverage-check.yaml", opts.configFile)
+	assert.Equal(t, "go.mod", opts.goMod)
+	assert.Equal(t, ".", opts.dirToParse)
+	assert.Equal(t, os.Args[0], opts.programName)
+
+	var expectedArgs []string
+	if len(os.Args) > 1 {
+		expectedArgs = os.Args[1:]
+	} else {
+		expectedArgs = []string{}
+	}
+	assert.Equal(t, expectedArgs, opts.rawArgs)
+
+	assert.Equal(t, os.Stdout, opts.stdout)
+	assert.Equal(t, os.Stderr, opts.stderr)
+}
