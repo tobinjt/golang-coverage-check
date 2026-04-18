@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1332,5 +1333,19 @@ func TestRunAndPrint(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMainFunction(t *testing.T) {
+	if os.Getenv("TEST_MAIN") == "1" {
+		os.Args = []string{"golang-coverage-check", "--example_config"}
+		main()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestMainFunction")
+	cmd.Env = append(os.Environ(), "TEST_MAIN=1")
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("process ran with err %v, want exit status 0", err)
 	}
 }
