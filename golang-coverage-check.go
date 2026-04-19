@@ -178,6 +178,24 @@ func (rule Rule) String() string {
 		rule.FilenameRegex, rule.FunctionRegex, rule.ReceiverRegex, rule.Coverage, rule.Comment)
 }
 
+// matches checks if a given CoverageLine matches the Rule's regexes.
+func (rule Rule) matches(cov CoverageLine, fInfoMap FunctionInfoMap) bool {
+	if rule.FilenameRegex != "" && !rule.compiledFilenameRegex.MatchString(cov.Filename) {
+		return false
+	}
+	if rule.FunctionRegex != "" && !rule.compiledFunctionRegex.MatchString(cov.Function) {
+		return false
+	}
+	if rule.ReceiverRegex != "" {
+		key := functionLocationKey(cov.Filename, cov.LineNumber)
+		receiver := fInfoMap[key].Receiver
+		if !rule.compiledReceiverRegex.MatchString(receiver) {
+			return false
+		}
+	}
+	return true
+}
+
 // Config represents an entire user config loaded from .golang-coverage-check.yaml.
 type Config struct {
 	// Comment is not interpreted or used; it is provided as a structured way of
@@ -539,18 +557,8 @@ Coverage:
 	for _, cov := range coverage {
 		debugInfo = append(debugInfo, fmt.Sprintf("- Line %v", cov))
 		for _, rule := range config.Rules {
-			if rule.FilenameRegex != "" && !rule.compiledFilenameRegex.MatchString(cov.Filename) {
+			if !rule.matches(cov, fInfoMap) {
 				continue
-			}
-			if rule.FunctionRegex != "" && !rule.compiledFunctionRegex.MatchString(cov.Function) {
-				continue
-			}
-			if rule.ReceiverRegex != "" {
-				key := functionLocationKey(cov.Filename, cov.LineNumber)
-				receiver := fInfoMap[key].Receiver
-				if !rule.compiledReceiverRegex.MatchString(receiver) {
-					continue
-				}
 			}
 			debugInfo = append(debugInfo, fmt.Sprintf("  - Matching rule: %v", rule))
 			if cov.Coverage < rule.Coverage {
