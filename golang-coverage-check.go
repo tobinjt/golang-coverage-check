@@ -479,51 +479,62 @@ func goCover(options Options) ([]string, []string, error) {
 	return lines, htmlPath, err
 }
 
+// parseCoverageLine parses a single line of coverage output and returns a
+// pointer to a CoverageLine, or nil if the line should be ignored (e.g., total).
+func parseCoverageLine(options Options, line string) (*CoverageLine, error) {
+	if len(line) == 0 {
+		return nil, nil
+	}
+	parts := strings.Fields(line)
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), line, parts)
+	}
+	if parts[0] == "total:" {
+		return nil, nil
+	}
+	rawFilename, rawFunction, rawPercentage := parts[0], parts[1], parts[2]
+
+	if !strings.HasSuffix(rawPercentage, "%") {
+		return nil, fmt.Errorf("could not extract percentage from \"%v\"", rawPercentage)
+	}
+	percentageStr := strings.TrimSuffix(rawPercentage, "%")
+	percentage, err := strconv.ParseFloat(percentageStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed parsing \"%v\" as a float: %w", rawPercentage, err)
+	}
+	if percentage > 100 {
+		return nil, fmt.Errorf("percentage (%v) > 100 in \"%v\"", percentage, rawPercentage)
+	}
+	if percentage < 0 {
+		return nil, fmt.Errorf("percentage (%v) < 0 in \"%v\"", percentage, rawPercentage)
+	}
+
+	fileLineParts := strings.Split(rawFilename, ":")
+	if len(fileLineParts) != 3 {
+		return nil, fmt.Errorf("expected `filename:linenumber:` in \"%v\"", rawFilename)
+	}
+
+	return &CoverageLine{
+		Filename:   strings.TrimPrefix(fileLineParts[0], options.modulePath),
+		LineNumber: fileLineParts[1],
+		Function:   rawFunction,
+		Coverage:   percentage,
+	}, nil
+}
+
 // parseCoverageOutput parses all the coverage lines and turns each into a
 // CoverageLine, returning a slice of CoverageLine and an error.
 func parseCoverageOutput(options Options, output []string) ([]CoverageLine, error) {
 	results := []CoverageLine{}
 
-	for i := range output {
-		if len(output[i]) == 0 {
-			// Skip blank lines.
-			continue
-		}
-		parts := strings.Fields(output[i])
-		if len(parts) != 3 {
-			return nil, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
-		}
-		if parts[0] == "total:" {
-			continue
-		}
-		rawFilename, rawFunction, rawPercentage := parts[0], parts[1], parts[2]
-
-		if !strings.HasSuffix(rawPercentage, "%") {
-			return nil, fmt.Errorf("could not extract percentage from \"%v\"", rawPercentage)
-		}
-		percentageStr := strings.TrimSuffix(rawPercentage, "%")
-		percentage, err := strconv.ParseFloat(percentageStr, 64)
+	for _, line := range output {
+		covLine, err := parseCoverageLine(options, line)
 		if err != nil {
-			return nil, fmt.Errorf("failed parsing \"%v\" as a float: %w", rawPercentage, err)
+			return nil, err
 		}
-		if percentage > 100 {
-			return nil, fmt.Errorf("percentage (%v) > 100 in \"%v\"", percentage, rawPercentage)
+		if covLine != nil {
+			results = append(results, *covLine)
 		}
-		if percentage < 0 {
-			return nil, fmt.Errorf("percentage (%v) < 0 in \"%v\"", percentage, rawPercentage)
-		}
-
-		fileLineParts := strings.Split(rawFilename, ":")
-		if len(fileLineParts) != 3 {
-			return nil, fmt.Errorf("expected `filename:linenumber:` in \"%v\"", rawFilename)
-		}
-
-		results = append(results, CoverageLine{
-			Filename:   strings.TrimPrefix(fileLineParts[0], options.modulePath),
-			LineNumber: fileLineParts[1],
-			Function:   rawFunction,
-			Coverage:   percentage,
-		})
 	}
 	return results, nil
 }
