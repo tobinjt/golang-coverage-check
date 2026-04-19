@@ -656,6 +656,30 @@ and requires /bin/sh, so it definitely won't work on Windows.
 	return flags
 }
 
+// setupConfigAndEnv reads the module metadata, configuration file, and parses
+// it into a Config struct, updating the module path in options.
+func setupConfigAndEnv(options *Options) (Config, error) {
+	modBytes, err := os.ReadFile(options.goMod)
+	if err != nil {
+		return Config{}, fmt.Errorf("failed reading %v: %w", options.goMod, err)
+	}
+	options.modulePath = modfile.ModulePath(modBytes) + "/"
+
+	if options.generateConfig {
+		// Don't require an existing config when generating one.
+		options.configFile = os.DevNull
+	}
+	configBytes, err := os.ReadFile(options.configFile)
+	if err != nil {
+		return Config{}, fmt.Errorf("failed reading config %v: %w", options.configFile, err)
+	}
+	config, err := parseYAMLConfig(configBytes)
+	if err != nil {
+		return Config{}, fmt.Errorf("failed parsing config %v: %w", options.configFile, err)
+	}
+	return config, nil
+}
+
 // realMain contains all the high level logic for the application, but in a
 // testable function.  It takes Options created by newOptions(), returns a
 // slice of strings to be output to stdout, a slice of strings to be output to
@@ -675,23 +699,9 @@ func realMain(options Options) ([]string, []string, error) {
 		return makeExampleConfig(), nil, nil
 	}
 
-	modBytes, err := os.ReadFile(options.goMod)
+	config, err := setupConfigAndEnv(&options)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed reading %v: %w", options.goMod, err)
-	}
-	options.modulePath = modfile.ModulePath(modBytes) + "/"
-
-	if options.generateConfig {
-		// Don't require an existing config when generating one.
-		options.configFile = os.DevNull
-	}
-	configBytes, err := os.ReadFile(options.configFile)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed reading config %v: %w", options.configFile, err)
-	}
-	config, err := parseYAMLConfig(configBytes)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed parsing config %v: %w", options.configFile, err)
+		return nil, nil, err
 	}
 
 	fInfoMap, err := makeFunctionInfoMap(options)
