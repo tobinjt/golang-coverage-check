@@ -178,7 +178,7 @@ func (rule Rule) String() string {
 		rule.FilenameRegex, rule.FunctionRegex, rule.ReceiverRegex, rule.Coverage, rule.Comment)
 }
 
-// matches returns true if the rule matches the given coverage line.
+// matches checks if a given CoverageLine matches the Rule's regexes.
 func (rule Rule) matches(cov CoverageLine, fInfoMap FunctionInfoMap) bool {
 	if rule.FilenameRegex != "" && !rule.compiledFilenameRegex.MatchString(cov.Filename) {
 		return false
@@ -364,7 +364,7 @@ func makeFunctionInfoMap(opts Options) (FunctionInfoMap, error) {
 				pos := fset.Position(function.Pos())
 				fl := FunctionInfo{
 					Filename:   pos.Filename,
-					LineNumber: fmt.Sprintf("%d", pos.Line),
+					LineNumber: strconv.Itoa(pos.Line),
 					Function:   function.Name.Name,
 					Receiver:   "",
 				}
@@ -437,9 +437,9 @@ func goCoverCapturePath(options Options, coverageFile string) ([]string, error) 
 
 	shellScriptContents := `#!/bin/sh
 
-echo "$@" > "%s"
+echo "$@" > "$GOLANG_COVERAGE_CHECK_OUTPUT_FILE"
 `
-	_, err = fmt.Fprintf(shellScript, shellScriptContents, outputFile.Name())
+	_, err = fmt.Fprint(shellScript, shellScriptContents)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,10 @@ echo "$@" > "%s"
 	if err = options.close(shellScript); err != nil {
 		return nil, err
 	}
-	env := []string{"BROWSER=" + shellScript.Name()}
+	env := []string{
+		"BROWSER=" + shellScript.Name(),
+		"GOLANG_COVERAGE_CHECK_OUTPUT_FILE=" + outputFile.Name(),
+	}
 	_, err = options.captureOutput(env, "go", "tool", "cover", "--html", coverageFile)
 	if err != nil {
 		return nil, err
@@ -497,53 +500,62 @@ func goCover(options Options) ([]string, []string, error) {
 	return lines, htmlPath, err
 }
 
+// parseCoverageLine parses a single line of coverage output and returns a
+// pointer to a CoverageLine, or nil if the line should be ignored (e.g., total).
+func parseCoverageLine(options Options, line string) (*CoverageLine, error) {
+	if len(line) == 0 {
+		return nil, nil
+	}
+	parts := strings.Fields(line)
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), line, parts)
+	}
+	if parts[0] == "total:" {
+		return nil, nil
+	}
+	rawFilename, rawFunction, rawPercentage := parts[0], parts[1], parts[2]
+
+	if !strings.HasSuffix(rawPercentage, "%") {
+		return nil, fmt.Errorf("could not extract percentage from \"%v\"", rawPercentage)
+	}
+	percentageStr := strings.TrimSuffix(rawPercentage, "%")
+	percentage, err := strconv.ParseFloat(percentageStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed parsing \"%v\" as a float: %w", rawPercentage, err)
+	}
+	if percentage > 100 {
+		return nil, fmt.Errorf("percentage (%v) > 100 in \"%v\"", percentage, rawPercentage)
+	}
+	if percentage < 0 {
+		return nil, fmt.Errorf("percentage (%v) < 0 in \"%v\"", percentage, rawPercentage)
+	}
+
+	fileLineParts := strings.Split(rawFilename, ":")
+	if len(fileLineParts) != 3 {
+		return nil, fmt.Errorf("expected `filename:linenumber:` in \"%v\"", rawFilename)
+	}
+
+	return &CoverageLine{
+		Filename:   strings.TrimPrefix(fileLineParts[0], options.modulePath),
+		LineNumber: fileLineParts[1],
+		Function:   rawFunction,
+		Coverage:   percentage,
+	}, nil
+}
+
 // parseCoverageOutput parses all the coverage lines and turns each into a
 // CoverageLine, returning a slice of CoverageLine and an error.
 func parseCoverageOutput(options Options, output []string) ([]CoverageLine, error) {
 	results := []CoverageLine{}
-	lineSplitter := regexp.MustCompile(`\t+`)
-	percentageExtractor := regexp.MustCompile(`^(.*)%$`)
 
-	for i := range output {
-		if len(output[i]) == 0 {
-			// Skip blank lines.
-			continue
-		}
-		parts := lineSplitter.Split(output[i], -1)
-		if len(parts) != 3 {
-			return nil, fmt.Errorf("expected 3 parts, found %v, in \"%v\" => %v", len(parts), output[i], parts)
-		}
-		if parts[0] == "total:" {
-			continue
-		}
-		rawFilename, rawFunction, rawPercentage := parts[0], parts[1], parts[2]
-
-		matches := percentageExtractor.FindStringSubmatch(rawPercentage)
-		if len(matches) == 0 {
-			return nil, fmt.Errorf("could not extract percentage from \"%v\"", rawPercentage)
-		}
-		percentage, err := strconv.ParseFloat(matches[1], 64)
+	for _, line := range output {
+		covLine, err := parseCoverageLine(options, line)
 		if err != nil {
-			return nil, fmt.Errorf("failed parsing \"%v\" as a float: %w", rawPercentage, err)
+			return nil, err
 		}
-		if percentage > 100 {
-			return nil, fmt.Errorf("percentage (%v) > 100 in \"%v\"", percentage, rawPercentage)
+		if covLine != nil {
+			results = append(results, *covLine)
 		}
-		if percentage < 0 {
-			return nil, fmt.Errorf("percentage (%v) < 0 in \"%v\"", percentage, rawPercentage)
-		}
-
-		fileLineParts := strings.Split(rawFilename, ":")
-		if len(fileLineParts) != 3 {
-			return nil, fmt.Errorf("expected `filename:linenumber:` in \"%v\"", rawFilename)
-		}
-
-		results = append(results, CoverageLine{
-			Filename:   strings.TrimPrefix(fileLineParts[0], options.modulePath),
-			LineNumber: fileLineParts[1],
-			Function:   rawFunction,
-			Coverage:   percentage,
-		})
 	}
 	return results, nil
 }
@@ -666,6 +678,30 @@ and requires /bin/sh, so it definitely won't work on Windows.
 	return flags
 }
 
+// setupConfigAndEnv reads the module metadata, configuration file, and parses
+// it into a Config struct, updating the module path in options.
+func setupConfigAndEnv(options *Options) (Config, error) {
+	modBytes, err := os.ReadFile(options.goMod)
+	if err != nil {
+		return Config{}, fmt.Errorf("failed reading %v: %w", options.goMod, err)
+	}
+	options.modulePath = modfile.ModulePath(modBytes) + "/"
+
+	if options.generateConfig {
+		// Don't require an existing config when generating one.
+		options.configFile = os.DevNull
+	}
+	configBytes, err := os.ReadFile(options.configFile)
+	if err != nil {
+		return Config{}, fmt.Errorf("failed reading config %v: %w", options.configFile, err)
+	}
+	config, err := parseYAMLConfig(configBytes)
+	if err != nil {
+		return Config{}, fmt.Errorf("failed parsing config %v: %w", options.configFile, err)
+	}
+	return config, nil
+}
+
 // realMain contains all the high level logic for the application, but in a
 // testable function.  It takes Options created by newOptions(), returns a
 // slice of strings to be output to stdout, a slice of strings to be output to
@@ -685,23 +721,9 @@ func realMain(options Options) ([]string, []string, error) {
 		return makeExampleConfig(), nil, nil
 	}
 
-	modBytes, err := os.ReadFile(options.goMod)
+	config, err := setupConfigAndEnv(&options)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed reading %v: %w", options.goMod, err)
-	}
-	options.modulePath = modfile.ModulePath(modBytes) + "/"
-
-	if options.generateConfig {
-		// Don't require an existing config when generating one.
-		options.configFile = os.DevNull
-	}
-	configBytes, err := os.ReadFile(options.configFile)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed reading config %v: %w", options.configFile, err)
-	}
-	config, err := parseYAMLConfig(configBytes)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed parsing config %v: %w", options.configFile, err)
+		return nil, nil, err
 	}
 
 	fInfoMap, err := makeFunctionInfoMap(options)
