@@ -482,7 +482,7 @@ func goCover(options Options) ([]string, []string, error) {
 // parseCoverageOutput parses all the coverage lines and turns each into a
 // CoverageLine, returning a slice of CoverageLine and an error.
 func parseCoverageOutput(options Options, output []string) ([]CoverageLine, error) {
-	results := []CoverageLine{}
+	results := make([]CoverageLine, 0, len(output))
 	lineSplitter := regexp.MustCompile(`\t+`)
 	percentageExtractor := regexp.MustCompile(`^(.*)%$`)
 
