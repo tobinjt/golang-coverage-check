@@ -533,13 +533,18 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 // checkCoverage checks that each function meets the required level of coverage,
 // returning a string containing debugging information and an error if
 // appropriate.
-func checkCoverage(config Config, coverage []CoverageLine, fInfoMap FunctionInfoMap) ([]string, error) {
+func checkCoverage(config Config, coverage []CoverageLine, fInfoMap FunctionInfoMap, debug bool) ([]string, error) {
 	errors := []string{}
-	debugInfo := []string{"Debug info for coverage matching"}
+	var debugInfo []string
+	if debug {
+		debugInfo = []string{"Debug info for coverage matching"}
+	}
 
 Coverage:
 	for _, cov := range coverage {
-		debugInfo = append(debugInfo, fmt.Sprintf("- Line %v", cov))
+		if debug {
+			debugInfo = append(debugInfo, fmt.Sprintf("- Line %v", cov))
+		}
 		for _, rule := range config.Rules {
 			if rule.FilenameRegex != "" && !rule.compiledFilenameRegex.MatchString(cov.Filename) {
 				continue
@@ -554,18 +559,24 @@ Coverage:
 					continue
 				}
 			}
-			debugInfo = append(debugInfo, fmt.Sprintf("  - Matching rule: %v", rule))
+			if debug {
+				debugInfo = append(debugInfo, fmt.Sprintf("  - Matching rule: %v", rule))
+			}
 			if cov.Coverage < rule.Coverage {
-				debugInfo = append(debugInfo,
-					fmt.Sprintf("  - actual coverage %.1f%% < required coverage %.1f%%",
-						cov.Coverage, rule.Coverage))
+				if debug {
+					debugInfo = append(debugInfo,
+						fmt.Sprintf("  - actual coverage %.1f%% < required coverage %.1f%%",
+							cov.Coverage, rule.Coverage))
+				}
 				errors = append(errors,
 					fmt.Sprintf("%v: actual coverage %.1f%% < required coverage %.1f%%: matching rule is `%v`",
 						cov, cov.Coverage, rule.Coverage, rule))
 			} else {
-				debugInfo = append(debugInfo,
-					fmt.Sprintf("  - actual coverage %.1f%% >= required coverage %.1f%%",
-						cov.Coverage, rule.Coverage))
+				if debug {
+					debugInfo = append(debugInfo,
+						fmt.Sprintf("  - actual coverage %.1f%% >= required coverage %.1f%%",
+							cov.Coverage, rule.Coverage))
+				}
 			}
 			continue Coverage
 		}
@@ -574,13 +585,17 @@ Coverage:
 			errors = append(errors,
 				fmt.Sprintf("%v: actual coverage %.1f%% < default coverage %.1f%%",
 					cov, cov.Coverage, config.DefaultCoverage))
-			debugInfo = append(debugInfo,
-				fmt.Sprintf("  - Default coverage %.1f%% not satisfied",
-					config.DefaultCoverage))
+			if debug {
+				debugInfo = append(debugInfo,
+					fmt.Sprintf("  - Default coverage %.1f%% not satisfied",
+						config.DefaultCoverage))
+			}
 		} else {
-			debugInfo = append(debugInfo,
-				fmt.Sprintf("  - Default coverage %.1f%% satisfied",
-					config.DefaultCoverage))
+			if debug {
+				debugInfo = append(debugInfo,
+					fmt.Sprintf("  - Default coverage %.1f%% satisfied",
+						config.DefaultCoverage))
+			}
 		}
 	}
 
@@ -715,7 +730,7 @@ func realMain(options Options) ([]string, []string, error) {
 		return []string{newConfig.String()}, nil, nil
 	}
 
-	debugInfo, err := checkCoverage(config, parsedCoverage, fInfoMap)
+	debugInfo, err := checkCoverage(config, parsedCoverage, fInfoMap, options.debugMatching)
 	if options.debugMatching {
 		return debugInfo, nil, err
 	}

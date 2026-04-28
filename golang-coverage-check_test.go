@@ -1021,7 +1021,7 @@ func TestCheckCoverage(t *testing.T) {
 		config, err := validateConfig(test.config)
 		assert.Nil(t, err)
 
-		debug, err := checkCoverage(config, coverage, test.fInfoMap)
+		debug, err := checkCoverage(config, coverage, test.fInfoMap, true)
 		if len(test.errors) == 0 {
 			assert.Nil(t, err)
 		} else {
