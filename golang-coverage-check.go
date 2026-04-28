@@ -540,6 +540,10 @@ func checkCoverage(config Config, coverage []CoverageLine, fInfoMap FunctionInfo
 Coverage:
 	for _, cov := range coverage {
 		debugInfo = append(debugInfo, fmt.Sprintf("- Line %v", cov))
+
+		receiverLookedUp := false
+		var receiver string
+
 		for _, rule := range config.Rules {
 			if rule.FilenameRegex != "" && !rule.compiledFilenameRegex.MatchString(cov.Filename) {
 				continue
@@ -548,8 +552,11 @@ Coverage:
 				continue
 			}
 			if rule.ReceiverRegex != "" {
-				key := functionLocationKey(cov.Filename, cov.LineNumber)
-				receiver := fInfoMap[key].Receiver
+				if !receiverLookedUp {
+					key := functionLocationKey(cov.Filename, cov.LineNumber)
+					receiver = fInfoMap[key].Receiver
+					receiverLookedUp = true
+				}
 				if !rule.compiledReceiverRegex.MatchString(receiver) {
 					continue
 				}
