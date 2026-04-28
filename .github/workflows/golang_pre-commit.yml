@@ -1,16 +1,33 @@
 #!/usr/bin/env -S make_go_github_workflow golang-coverage-check
-name: Go CI
+name: Go pre-commit checks.
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
-  test-and-lint:
+  pre-commit-checks:
+    name: |
+      Run `goimports`, `golangci-lint`, `govulncheck`, and `go test`.
+      Commits any changes made by `goimports` or `gofmt`.
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to push new commits.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Ensure we are on the PR branch, not a detached head
+          ref: ${{ github.head_ref }}
+          # Required to push new commits.
+          persist-credentials: true
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -21,15 +38,14 @@ jobs:
       - name: Install goimports
         run: go install golang.org/x/tools/cmd/goimports@latest
 
-      - name: Check Imports
-        run: |
-          goimports .
-          git diff --exit-code
+      - name: Check imports and formatting
+        run: goimports .
 
-      - name: Check Formatting
-        run: |
-          go fmt .
-          git diff --exit-code
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "style: automatic fixes by `goimports`"
+          file_pattern: '*.go'
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9

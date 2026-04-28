@@ -40,6 +40,12 @@ repos:
       - id: golang-coverage-check
   - repo: local
     hooks:
+      - id: actionlint
+        name: Run `actionlint`
+        language: system
+        types: [yaml]
+        exclude: dependabot.yml|.*.yaml$
+        entry: actionlint
       - id: markdownlint
         name: Run `markdownlint`
         language: system

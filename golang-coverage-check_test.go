@@ -20,13 +20,27 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v2"
 )
+
+func TestFunctionLocationKey(t *testing.T) {
+	assert.Equal(t, "file.go:123", functionLocationKey("file.go", "123"))
+}
+
+func TestFunctionInfoKey(t *testing.T) {
+	fi := FunctionInfo{
+		Filename:   "example.go",
+		LineNumber: "42",
+	}
+	assert.Equal(t, "example.go:42", fi.key())
+}
 
 func newTestOptions() Options {
 	options := newOptions()
@@ -35,6 +49,23 @@ func newTestOptions() Options {
 		panic("captureOutput was called without being set by the test")
 	}
 	return options
+}
+
+func TestConfigString(t *testing.T) {
+	config := Config{
+		Comment:         "Test comment",
+		DefaultCoverage: 50.0,
+		Rules: []Rule{
+			{
+				Comment:       "Test rule comment",
+				FunctionRegex: "^Test.*",
+				Coverage:      100.0,
+			},
+		},
+	}
+	expected, err := yaml.Marshal(&config)
+	assert.Nil(t, err)
+	assert.Equal(t, string(expected), config.String())
 }
 
 func TestMakeExampleConfig(t *testing.T) {
@@ -317,6 +348,13 @@ func TestMakeFunctionInfoMapSupport(t *testing.T) {
 	assert.Equal(t, "This function is at line 20 to test makeFunctionInfoMap()", functionAtLine20())
 	mr := methodReceiver{}
 	assert.Equal(t, "This method has a methodReceiver receiver to test makeFunctionInfoMap()", mr.String())
+}
+
+func TestFunctionLocationKey(t *testing.T) {
+	assert.Equal(t, "test.go:42", functionLocationKey("test.go", "42"))
+	assert.Equal(t, "empty:", functionLocationKey("empty", ""))
+	assert.Equal(t, ":12", functionLocationKey("", "12"))
+	assert.Equal(t, ":", functionLocationKey("", ""))
 }
 
 func TestCaptureOutput(t *testing.T) {
@@ -760,6 +798,61 @@ total:											(statements)		38.1%
 		input := fmt.Sprintf("foo.go:26:		String			%s", test.input)
 		_, err := parseCoverageOutput(options, []string{input})
 		assert.ErrorContains(t, err, test.err)
+	}
+}
+
+func TestCoverageLine_String(t *testing.T) {
+	tests := []struct {
+		desc     string
+		coverage CoverageLine
+		expected string
+	}{
+		{
+			desc: "Standard coverage line",
+			coverage: CoverageLine{
+				Filename:   "test.go",
+				LineNumber: "10",
+				Function:   "MyFunc",
+				Coverage:   85.5,
+			},
+			expected: "test.go:10:\tMyFunc\t85.5%",
+		},
+		{
+			desc: "Zero coverage",
+			coverage: CoverageLine{
+				Filename:   "zero.go",
+				LineNumber: "1",
+				Function:   "ZeroFunc",
+				Coverage:   0.0,
+			},
+			expected: "zero.go:1:\tZeroFunc\t0.0%",
+		},
+		{
+			desc: "Full coverage",
+			coverage: CoverageLine{
+				Filename:   "full.go",
+				LineNumber: "100",
+				Function:   "FullFunc",
+				Coverage:   100.0,
+			},
+			expected: "full.go:100:\tFullFunc\t100.0%",
+		},
+		{
+			desc: "Coverage with one decimal place",
+			coverage: CoverageLine{
+				Filename:   "decimal.go",
+				LineNumber: "42",
+				Function:   "DecimalFunc",
+				Coverage:   12.345,
+			},
+			expected: "decimal.go:42:\tDecimalFunc\t12.3%",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			assert.Equal(t, test.expected, test.coverage.String())
+		})
 	}
 }
 
@@ -1332,5 +1425,29 @@ func TestRunAndPrint(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMainFunction(t *testing.T) {
+	if os.Getenv("TEST_MAIN") == "1" {
+		os.Args = []string{"golang-coverage-check", "--example_config"}
+		main()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestMainFunction")
+	cmd.Env = append(os.Environ(), "TEST_MAIN=1")
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("process ran with err %v, want exit status 0", err)
+	}
+}
+
+func BenchmarkMakeFunctionInfoMap(b *testing.B) {
+	options := newTestOptions()
+	for i := 0; i < b.N; i++ {
+		_, err := makeFunctionInfoMap(options)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
