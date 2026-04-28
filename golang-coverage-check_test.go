@@ -319,6 +319,13 @@ func TestMakeFunctionInfoMapSupport(t *testing.T) {
 	assert.Equal(t, "This method has a methodReceiver receiver to test makeFunctionInfoMap()", mr.String())
 }
 
+func TestFunctionLocationKey(t *testing.T) {
+	assert.Equal(t, "test.go:42", functionLocationKey("test.go", "42"))
+	assert.Equal(t, "empty:", functionLocationKey("empty", ""))
+	assert.Equal(t, ":12", functionLocationKey("", "12"))
+	assert.Equal(t, ":", functionLocationKey("", ""))
+}
+
 func TestCaptureOutput(t *testing.T) {
 	output, err := captureOutput(nil, "cat", "/non-existent")
 	assert.Nil(t, output)
