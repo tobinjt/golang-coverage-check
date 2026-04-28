@@ -763,6 +763,61 @@ total:											(statements)		38.1%
 	}
 }
 
+func TestCoverageLine_String(t *testing.T) {
+	tests := []struct {
+		desc     string
+		coverage CoverageLine
+		expected string
+	}{
+		{
+			desc: "Standard coverage line",
+			coverage: CoverageLine{
+				Filename:   "test.go",
+				LineNumber: "10",
+				Function:   "MyFunc",
+				Coverage:   85.5,
+			},
+			expected: "test.go:10:\tMyFunc\t85.5%",
+		},
+		{
+			desc: "Zero coverage",
+			coverage: CoverageLine{
+				Filename:   "zero.go",
+				LineNumber: "1",
+				Function:   "ZeroFunc",
+				Coverage:   0.0,
+			},
+			expected: "zero.go:1:\tZeroFunc\t0.0%",
+		},
+		{
+			desc: "Full coverage",
+			coverage: CoverageLine{
+				Filename:   "full.go",
+				LineNumber: "100",
+				Function:   "FullFunc",
+				Coverage:   100.0,
+			},
+			expected: "full.go:100:\tFullFunc\t100.0%",
+		},
+		{
+			desc: "Coverage with one decimal place",
+			coverage: CoverageLine{
+				Filename:   "decimal.go",
+				LineNumber: "42",
+				Function:   "DecimalFunc",
+				Coverage:   12.345,
+			},
+			expected: "decimal.go:42:\tDecimalFunc\t12.3%",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			assert.Equal(t, test.expected, test.coverage.String())
+		})
+	}
+}
+
 func stripComments(input []string) []string {
 	output := []string{}
 	for _, line := range input {
