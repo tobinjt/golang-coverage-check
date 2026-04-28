@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v2"
 )
 
 func TestFunctionLocationKey(t *testing.T) {
@@ -48,6 +49,23 @@ func newTestOptions() Options {
 		panic("captureOutput was called without being set by the test")
 	}
 	return options
+}
+
+func TestConfigString(t *testing.T) {
+	config := Config{
+		Comment:         "Test comment",
+		DefaultCoverage: 50.0,
+		Rules: []Rule{
+			{
+				Comment:       "Test rule comment",
+				FunctionRegex: "^Test.*",
+				Coverage:      100.0,
+			},
+		},
+	}
+	expected, err := yaml.Marshal(&config)
+	assert.Nil(t, err)
+	assert.Equal(t, string(expected), config.String())
 }
 
 func TestMakeExampleConfig(t *testing.T) {
