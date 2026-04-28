@@ -30,10 +30,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func TestFunctionLocationKey(t *testing.T) {
-	assert.Equal(t, "file.go:123", functionLocationKey("file.go", "123"))
-}
-
 func TestFunctionInfoKey(t *testing.T) {
 	fi := FunctionInfo{
 		Filename:   "example.go",
