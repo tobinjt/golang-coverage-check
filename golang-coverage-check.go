@@ -437,9 +437,9 @@ func goCoverCapturePath(options Options, coverageFile string) ([]string, error) 
 
 	shellScriptContents := `#!/bin/sh
 
-echo "$@" > "%s"
+echo "$@" > "$GOLANG_COVERAGE_CHECK_OUTPUT_FILE"
 `
-	_, err = fmt.Fprintf(shellScript, shellScriptContents, outputFile.Name())
+	_, err = fmt.Fprint(shellScript, shellScriptContents)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,10 @@ echo "$@" > "%s"
 	if err = options.close(shellScript); err != nil {
 		return nil, err
 	}
-	env := []string{"BROWSER=" + shellScript.Name()}
+	env := []string{
+		"BROWSER=" + shellScript.Name(),
+		"GOLANG_COVERAGE_CHECK_OUTPUT_FILE=" + outputFile.Name(),
+	}
 	_, err = options.captureOutput(env, "go", "tool", "cover", "--html", coverageFile)
 	if err != nil {
 		return nil, err
