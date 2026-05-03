@@ -1,4 +1,4 @@
-#!/usr/bin/env -S make_go_github_workflow golang-coverage-check
+#!/usr/bin/env -S make_github_workflows
 name: Go pre-commit checks.
 on:
   push:
