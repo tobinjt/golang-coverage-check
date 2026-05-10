@@ -369,6 +369,16 @@ func TestCaptureOutput(t *testing.T) {
 	assert.Len(t, rootLines, 1)
 }
 
+func TestMultipleBooleanFlagsMessage(t *testing.T) {
+	message := multipleBooleanFlagsMessage()
+	assert.Contains(t, message, "--example_config")
+	assert.Contains(t, message, "--generate_config")
+	assert.Contains(t, message, "--debug_matching")
+	assert.Contains(t, message, "--coverage_html="+htmlShowPath)
+	assert.Contains(t, message, "only one of")
+	assert.Contains(t, message, "can be used because they all output to stdout")
+}
+
 func TestReadLineWithRetry_Success(t *testing.T) {
 	file, err := os.Open("go.mod")
 	assert.Nil(t, err)

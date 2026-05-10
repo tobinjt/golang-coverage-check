@@ -16,6 +16,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"go/ast"
@@ -564,7 +565,7 @@ func parseCoverageOutput(options Options, output []string) ([]CoverageLine, erro
 // returning a string containing debugging information and an error if
 // appropriate.
 func checkCoverage(config Config, coverage []CoverageLine, fInfoMap FunctionInfoMap) ([]string, error) {
-	errors := []string{}
+	errs := []string{}
 	debugInfo := []string{"Debug info for coverage matching"}
 
 Coverage:
@@ -579,7 +580,7 @@ Coverage:
 				debugInfo = append(debugInfo,
 					fmt.Sprintf("  - actual coverage %.1f%% < required coverage %.1f%%",
 						cov.Coverage, rule.Coverage))
-				errors = append(errors,
+				errs = append(errs,
 					fmt.Sprintf("%v: actual coverage %.1f%% < required coverage %.1f%%: matching rule is `%v`",
 						cov, cov.Coverage, rule.Coverage, rule))
 			} else {
@@ -591,7 +592,7 @@ Coverage:
 		}
 
 		if cov.Coverage < config.DefaultCoverage {
-			errors = append(errors,
+			errs = append(errs,
 				fmt.Sprintf("%v: actual coverage %.1f%% < default coverage %.1f%%",
 					cov, cov.Coverage, config.DefaultCoverage))
 			debugInfo = append(debugInfo,
@@ -604,8 +605,8 @@ Coverage:
 		}
 	}
 
-	if len(errors) > 0 {
-		return debugInfo, fmt.Errorf("%s", strings.Join(errors, "\n"))
+	if len(errs) > 0 {
+		return debugInfo, errors.New(strings.Join(errs, "\n"))
 	}
 	return debugInfo, nil
 }
@@ -640,7 +641,7 @@ func validateFlags(options Options) error {
 		}
 	}
 	if count > 1 {
-		return fmt.Errorf("%s", multipleBooleanFlagsMessage())
+		return errors.New(multipleBooleanFlagsMessage())
 	}
 	return nil
 }
