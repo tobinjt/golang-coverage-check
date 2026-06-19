@@ -1,5 +1,22 @@
 # golang-coverage-check
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Quick start](#quick-start)
+  - [Bootstrapping a config](#bootstrapping-a-config)
+  - [Pre-commit hook](#pre-commit-hook)
+- [Configuration](#configuration)
+  - [Example config](#example-config)
+  - [Fields in the config file](#fields-in-the-config-file)
+  - [Order of evaluation](#order-of-evaluation)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [Code of Conduct](#code-of-conduct)
+- [License](#license)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 A tool to check that Golang code has sufficient test coverage. This tool can be
 used via <https://pre-commit.com> or standalone by running
 `golang-coverage-check`.
