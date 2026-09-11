@@ -1,10 +1,10 @@
 module github.com/tobinjt/golang-coverage-check
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/mod v0.40.0
+	golang.org/x/mod v0.41.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
