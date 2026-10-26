@@ -55,7 +55,7 @@ repos:
   # managed-by-populate-pre-commit end: golang.yaml
   # managed-by-populate-pre-commit start: golangci-lint.yaml
   - repo: https://github.com/golangci/golangci-lint
-    rev: v2.14.0
+    rev: v2.15.0
     hooks:
     - id: golangci-lint
   # managed-by-populate-pre-commit end: golangci-lint.yaml
@@ -90,6 +90,17 @@ repos:
       exclude: CODE_OF_CONDUCT.md
       entry: markdownlint
   # managed-by-populate-pre-commit end: markdownlint.yaml
+  # managed-by-populate-pre-commit start: mdformat.yaml
+  - repo: local
+    hooks:
+    - id: mdformat
+      name: Run `mdformat`
+      language: system
+      types:
+      - markdown
+      exclude: ^(CODE_OF_CONDUCT\.md|README\.md)$
+      entry: mdformat
+  # managed-by-populate-pre-commit end: mdformat.yaml
   # managed-by-populate-pre-commit start: meta.yaml
   - repo: meta
     hooks:
